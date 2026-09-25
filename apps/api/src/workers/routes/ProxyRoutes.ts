@@ -11,18 +11,14 @@ function inferKind(model: unknown): ProviderKind | null {
   const m = model.toLowerCase();
   if (m.startsWith('claude-')) return 'ANTHROPIC';
   if (m.startsWith('gemini-') || m.startsWith('models/gemini-')) return 'GEMINI';
-  if (
-    m.startsWith('gpt-') ||
+  return m.startsWith('gpt-') ||
     m.startsWith('o1-') ||
     m.startsWith('o3-') ||
     m.startsWith('o4-') ||
     m.startsWith('text-embedding-') ||
     m.startsWith('whisper-') ||
     m.startsWith('dall-e-') ||
-    m.startsWith('tts-')
-  )
-    return 'OPENAI';
-  return null;
+    m.startsWith('tts-') ? 'OPENAI' : null;
 }
 
 async function resolveProviderId(

@@ -26,6 +26,5 @@ export function ContextBar({ crumb, actions, bare = false }: { crumb: React.Reac
   );
   // `bare` lets composite headers (RepoHeader) share one sticky shell for
   // the title row plus their own second row.
-  if (bare) return row;
-  return <div className="sticky top-0 z-40 border-b border-[var(--color-border)] bg-[var(--color-surface-1)]/95 backdrop-blur">{row}</div>;
+  return bare ? row : <div className="sticky top-0 z-40 border-b border-[var(--color-border)] bg-[var(--color-surface-1)]/95 backdrop-blur">{row}</div>;
 }

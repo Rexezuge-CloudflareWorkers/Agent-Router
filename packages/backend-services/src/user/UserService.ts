@@ -32,8 +32,7 @@ function deriveUsernameCandidate(email: string): string {
   for (const ch of sanitized) {
     if ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) alnum += ch;
   }
-  if (alnum.length > 0) return alnum.slice(0, 39);
-  return 'user';
+  return alnum.length > 0 ? alnum.slice(0, 39) : 'user';
 }
 
 class UserService {

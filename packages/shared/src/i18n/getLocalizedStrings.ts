@@ -14,8 +14,7 @@ function getBackendStrings(locale: string | null | undefined): BackendLocaleStri
 
 function resolveLocalizedStrings(locale?: string | null, fallback?: string | null): BackendLocaleStrings {
   const primary = normalizeBackendLocale(locale);
-  if (primary !== 'en') return getBackendStrings(primary);
-  return getBackendStrings(normalizeBackendLocale(fallback));
+  return getBackendStrings(primary === 'en' ? normalizeBackendLocale(fallback) : primary);
 }
 
 export { BACKEND_STRINGS, getBackendStrings, resolveLocalizedStrings };

@@ -43,8 +43,7 @@ class KeyCrypto {
 
   public static hintFor(secret: string): string {
     const trimmed = secret.trim();
-    if (trimmed.length <= 8) return `…${trimmed.slice(-4)}`;
-    return `${trimmed.slice(0, 3)}…${trimmed.slice(-4)}`;
+    return trimmed.length <= 8 ? `…${trimmed.slice(-4)}` : `${trimmed.slice(0, 3)}…${trimmed.slice(-4)}`;
   }
 }
 

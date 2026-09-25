@@ -41,8 +41,7 @@ async function userAuthenticationHandler(c: RequestContext, next: Next): Promise
 function parseBearerToken(header: string): string | null {
   const trimmed = header.trim();
   const space = trimmed.indexOf(' ');
-  if (space === -1) return null;
-  if (trimmed.slice(0, space).toLowerCase() !== 'bearer') return null;
+  if ((space === -1) || (trimmed.slice(0, space).toLowerCase() !== 'bearer')) return null;
   const token = trimmed.slice(space + 1).trim();
   return token || null;
 }

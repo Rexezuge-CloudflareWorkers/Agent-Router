@@ -11,8 +11,7 @@ export function formatTimestamp(timestampSeconds: number | null | undefined, lng
   const diffHours = Math.floor(diffMins / 60);
   if (diffHours < 24) return `${diffHours}h ago`;
   const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString(resolveLocale(lng));
+  return diffDays < 7 ? `${diffDays}d ago` : date.toLocaleDateString(resolveLocale(lng));
 }
 
 export function formatExpiryTimestamp(timestampSeconds: number | null | undefined, lng?: string | null): string {
@@ -26,8 +25,7 @@ export function formatExpiryTimestamp(timestampSeconds: number | null | undefine
   const diffHours = Math.floor(diffMins / 60);
   if (diffHours < 24) return `Expires in ${diffHours}h`;
   const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 30) return `Expires in ${diffDays}d`;
-  return `Expires ${date.toLocaleDateString(resolveLocale(lng))}`;
+  return diffDays < 30 ? `Expires in ${diffDays}d` : `Expires ${date.toLocaleDateString(resolveLocale(lng))}`;
 }
 
 export function formatCommitDate(timestampSeconds: number, timezoneOffset: number, lng?: string | null): string {

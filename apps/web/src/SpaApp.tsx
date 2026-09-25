@@ -10,8 +10,7 @@ function TopHeader({ userEmail, username }: { userEmail: string | null; username
   // The marketing/global header is root-only: every other route renders a
   // contextual `ContextBar` instead, so the top anchor never moves pages.
   const isRootPage = useMatch('/') !== null;
-  if (!isRootPage) return null;
-  return <Header userEmail={userEmail} username={username} />;
+  return isRootPage ? <Header userEmail={userEmail} username={username} /> : null;
 }
 
 export default function SpaApp() {
