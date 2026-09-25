@@ -114,9 +114,7 @@ interface BuildEnvelopeInput {
 }
 
 function buildEnvelope(input: BuildEnvelopeInput): RealtimeEnvelope | null {
-  if (!isChannel(input.channel)) return null;
-  if (!EVENT_TYPE_RE.test(input.type)) return null;
-  if (typeof input.actor !== 'string' || input.actor.length > 320) return null;
+  if (!isChannel(input.channel) || !EVENT_TYPE_RE.test(input.type) || typeof input.actor !== 'string' || input.actor.length > 320) return null;
   const title = input.title.slice(0, MAX_TITLE_LENGTH);
   const extra: Record<string, unknown> = input.extra && typeof input.extra === 'object' ? input.extra : {};
   return {
@@ -147,8 +145,7 @@ interface ClientFrame {
 const CLIENT_KINDS: ReadonlySet<string> = new Set(['presence.heartbeat', 'typing.start', 'typing.stop']);
 
 function parseClientFrame(raw: string | ArrayBuffer): ClientFrame | null {
-  if (typeof raw !== 'string') return null;
-  if (raw.length === 0 || raw.length > MAX_MESSAGE_BYTES) return null;
+  if ((typeof raw !== 'string') || raw.length === 0 || raw.length > MAX_MESSAGE_BYTES) return null;
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -157,8 +154,7 @@ function parseClientFrame(raw: string | ArrayBuffer): ClientFrame | null {
   }
   if (typeof parsed !== 'object' || parsed === null) return null;
   const frame = parsed as Record<string, unknown>;
-  if (typeof frame.kind !== 'string' || !CLIENT_KINDS.has(frame.kind)) return null;
-  if (!isChannel(frame.channel)) return null;
+  if (typeof frame.kind !== 'string' || !CLIENT_KINDS.has(frame.kind) || !isChannel(frame.channel)) return null;
   const name = typeof frame.name === 'string' ? frame.name.slice(0, 80) : null;
   return { kind: frame.kind as ClientFrameKind, channel: frame.channel, name };
 }

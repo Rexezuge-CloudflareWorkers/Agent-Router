@@ -17,8 +17,7 @@ export function canonicalizeLocaleTag(tag: string): string {
 export function normalizeLocale(tag: string | null | undefined): string {
   if (!tag || typeof tag !== 'string') return 'en';
   const canonical = canonicalizeLocaleTag(tag);
-  if ((SUPPORTED_LANGUAGES as readonly string[]).includes(canonical)) return canonical;
-  return normalizeLanguage(canonical);
+  return (SUPPORTED_LANGUAGES as readonly string[]).includes(canonical) ? canonical : normalizeLanguage(canonical);
 }
 
 /**

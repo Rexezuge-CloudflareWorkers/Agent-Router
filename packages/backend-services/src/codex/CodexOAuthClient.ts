@@ -73,10 +73,11 @@ function parseAccountId(idToken: string | null, accessToken: string | null): str
   for (const token of [idToken, accessToken]) {
     const payload = token ? decodeJwtPayload(token) : null;
     const namespaced = payload?.['https://api.openai.com/auth'];
-    if (namespaced && typeof namespaced === 'object' && !Array.isArray(namespaced)) {
-      const accountId = (namespaced as Record<string, unknown>)['chatgpt_account_id'];
-      if (typeof accountId === 'string' && accountId.trim()) return accountId.trim();
+    if (!(namespaced && typeof namespaced === 'object') || Array.isArray(namespaced)) {
+      continue;
     }
+    const accountId = (namespaced as Record<string, unknown>)['chatgpt_account_id'];
+    if (typeof accountId === 'string' && accountId.trim()) return accountId.trim();
   }
   return null;
 }

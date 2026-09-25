@@ -34,22 +34,17 @@ function devEmailStrategy(env: AccessAuthEnv): Promise<string | null> {
   if (!raw) return Promise.resolve(null);
   // Fail closed on malformed bypass emails — fall through to JWT instead of
   // authenticating an invalid identity.
-  if (!raw.includes('@') || raw.length > 254 || /\s/.test(raw)) return Promise.resolve(null);
-  return Promise.resolve(raw.toLowerCase());
+  return !raw.includes('@') || raw.length > 254 || /\s/.test(raw) ? Promise.resolve(null) : Promise.resolve(raw.toLowerCase());
 }
 
 async function accessJwtStrategy(env: AccessAuthEnv, request: Request): Promise<string | null> {
-  if (env.TEAM_DOMAIN && env.POLICY_AUD) {
-    return AccessAuthService.verifyAccessJwt(request, env.TEAM_DOMAIN, env.POLICY_AUD);
-  }
-  return null;
+  return env.TEAM_DOMAIN && env.POLICY_AUD ? AccessAuthService.verifyAccessJwt(request, env.TEAM_DOMAIN, env.POLICY_AUD) : null;
 }
 
 async function accessCtxStrategy(_env: AccessAuthEnv, _request: Request, accessCtx?: AccessIdentityContext): Promise<string | null> {
   const identity = await accessCtx?.access?.getIdentity?.().catch(() => null);
   const raw = identity?.email?.trim().toLowerCase() ?? '';
-  if (!raw || !raw.includes('@') || raw.length > 254 || /\s/.test(raw)) return null;
-  return raw;
+  return !raw || !raw.includes('@') || raw.length > 254 || /\s/.test(raw) ? null : raw;
 }
 
 const DEFAULT_ACCESS_AUTH_STRATEGIES: readonly AccessAuthStrategy[] = [

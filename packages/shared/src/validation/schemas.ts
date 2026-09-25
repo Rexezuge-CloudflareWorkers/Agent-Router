@@ -56,12 +56,9 @@ const MAX_RESOURCE_NUMBER = 2_147_483_647;
 function parsePositiveInt(raw: string | undefined | null, max: number = MAX_RESOURCE_NUMBER): number | null {
   if (!raw) return null;
   const trimmed = raw.trim();
-  if (!trimmed) return null;
-  if (!/^\d+$/.test(trimmed)) return null;
+  if (!trimmed || !/^\d+$/.test(trimmed)) return null;
   const parsed = Number(trimmed);
-  if (!Number.isSafeInteger(parsed)) return null;
-  if (parsed < 1 || parsed > max) return null;
-  return parsed;
+  return !Number.isSafeInteger(parsed) || parsed < 1 || parsed > max ? null : parsed;
 }
 
 const tokenIdSchema = z.string().trim().uuid('Invalid token id');
@@ -72,15 +69,13 @@ const MAX_AUDIT_LIMIT = 100;
 function clampAuditLimit(raw: number | undefined): number | undefined {
   if (raw === undefined) return undefined;
   if (!Number.isSafeInteger(raw)) return undefined;
-  if (raw < 1) return undefined;
-  return Math.min(raw, MAX_AUDIT_LIMIT);
+  return raw < 1 ? undefined : Math.min(raw, MAX_AUDIT_LIMIT);
 }
 
 function truncateAuditFilter(value: string | undefined): string | undefined {
   if (!value) return undefined;
   const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  return trimmed.slice(0, MAX_AUDIT_FILTER_LENGTH);
+  return trimmed ? trimmed.slice(0, MAX_AUDIT_FILTER_LENGTH) : undefined;
 }
 
 function sanitizeCommitMessage(raw: unknown, fallback: string): string {
@@ -97,8 +92,7 @@ function sanitizeCommitMessage(raw: unknown, fallback: string): string {
 function decodeBase64Strict(input: string): Uint8Array | null {
   try {
     const clean = input.replaceAll(/\s/g, '');
-    if (!clean || clean.length % 4 === 1) return null;
-    if (!/^[a-z0-9+/]*={0,2}$/i.test(clean)) return null;
+    if (!clean || clean.length % 4 === 1 || !/^[a-z0-9+/]*={0,2}$/i.test(clean)) return null;
     const binary = atob(clean);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.codePointAt(i) ?? 0;
@@ -120,9 +114,7 @@ const ALLOWED_ASSET_CONTENT_TYPES = new Set([
 function normalizeAssetContentType(raw: unknown): string {
   if (typeof raw !== 'string') return 'application/octet-stream';
   const trimmed = raw.trim().split(';', 1)[0].trim().toLowerCase();
-  if (!trimmed || trimmed.length > 128) return 'application/octet-stream';
-  if (!/^[\w.+-]+\/[\w.+-]+$/.test(trimmed)) return 'application/octet-stream';
-  if (trimmed.startsWith('text/html') || trimmed.startsWith('image/svg')) return 'application/octet-stream';
+  if (!trimmed || trimmed.length > 128 || !/^[\w.+-]+\/[\w.+-]+$/.test(trimmed) || trimmed.startsWith('text/html') || trimmed.startsWith('image/svg')) return 'application/octet-stream';
   return ALLOWED_ASSET_CONTENT_TYPES.has(trimmed) ? trimmed : 'application/octet-stream';
 }
 

@@ -50,8 +50,7 @@ const LEGACY_CODEX_BASE_URLS = new Set(['https://api.openai.com/v1', 'https://ap
 
 function resolveCodexBase(baseUrl: string | null): string {
   const trimmed = (baseUrl ?? '').trim().replace(/\/$/, '');
-  if (!trimmed || LEGACY_CODEX_BASE_URLS.has(trimmed) || LEGACY_CODEX_BASE_URLS.has(`${trimmed}/`)) return CODEX_BASE_URL;
-  return trimmed;
+  return !trimmed || LEGACY_CODEX_BASE_URLS.has(trimmed) || LEGACY_CODEX_BASE_URLS.has(`${trimmed}/`) ? CODEX_BASE_URL : trimmed;
 }
 
 /**
@@ -163,8 +162,7 @@ function parseUsage(kind: ProviderKind, responseJson: unknown): ParsedUsage {
     if (kind === 'OPENAI_CODEX') {
       const prompt = typeof usage.input_tokens === 'number' ? usage.input_tokens : 0;
       const completion = typeof usage.output_tokens === 'number' ? usage.output_tokens : 0;
-      if (prompt === 0 && completion === 0) return { promptTokens: 0, completionTokens: 0, estimated: true };
-      return { promptTokens: prompt, completionTokens: completion, estimated: false };
+      return prompt === 0 && completion === 0 ? { promptTokens: 0, completionTokens: 0, estimated: true } : { promptTokens: prompt, completionTokens: completion, estimated: false };
     }
     const prompt = typeof usage.prompt_tokens === 'number' ? usage.prompt_tokens : 0;
     const completion = typeof usage.completion_tokens === 'number' ? usage.completion_tokens : 0;

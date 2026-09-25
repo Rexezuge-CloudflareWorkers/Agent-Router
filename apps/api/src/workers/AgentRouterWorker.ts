@@ -59,17 +59,12 @@ class AgentRouterWorker extends AbstractEntrypointWorker {
     // SPA catch-all for the management UI.
     app.get('*', (c) => {
       const path: string = new URL(c.req.url).pathname;
-      if (
-        path === '/' ||
+      return path === '/' ||
         path === '/settings' ||
         path === '/providers' ||
         path === '/keys' ||
         path === '/usage' ||
-        path.startsWith('/user/')
-      ) {
-        return c.html(SPA_HTML);
-      }
-      return c.notFound();
+        path.startsWith('/user/') ? c.html(SPA_HTML) : c.notFound();
     });
 
     this.app = openapi;
