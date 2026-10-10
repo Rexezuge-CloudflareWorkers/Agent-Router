@@ -14,7 +14,7 @@
     "@agent-router/background": "workspace:*",
     "@agent-router/shared": "workspace:*",
     "chanfana": "3.4.0",
-    "hono": "4.13.12",
+    "hono": "4.13.13",
     "zod": "4.6.5"
   },
   "devDependencies": {
