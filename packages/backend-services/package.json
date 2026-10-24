@@ -31,7 +31,7 @@
     "@agent-router/backend-errors": "workspace:*",
     "@agent-router/backend-runtime": "workspace:*",
     "@agent-router/shared": "workspace:*",
-    "jose": "6.2.12"
+    "jose": "6.2.13"
   },
   "devDependencies": {
     "@types/node": "26.6.5",
