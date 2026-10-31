@@ -13,7 +13,7 @@
     "@agent-router/backend-services": "workspace:*",
     "@agent-router/background": "workspace:*",
     "@agent-router/shared": "workspace:*",
-    "chanfana": "3.4.0",
+    "chanfana": "3.4.2",
     "hono": "4.13.13",
     "zod": "4.6.7"
   },
