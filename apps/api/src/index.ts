@@ -8,3 +8,4 @@ export default {
 };
 
 export { CronTasksWorker } from '@agent-router/background';
+export { ProxyGateway } from './workers/ProxyGateway';

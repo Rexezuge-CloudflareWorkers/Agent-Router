@@ -28,12 +28,20 @@
         "name": "CRON_TASKS",
         "class_name": "CronTasksWorker",
       },
+      {
+        "name": "PROXY_GATEWAY",
+        "class_name": "ProxyGateway",
+      },
     ],
   },
   "migrations": [
     {
       "tag": "v1000000000",
       "new_sqlite_classes": ["CronTasksWorker"],
+    },
+    {
+      "tag": "v1000000001",
+      "new_sqlite_classes": ["ProxyGateway"],
     },
   ],
   "d1_databases": [

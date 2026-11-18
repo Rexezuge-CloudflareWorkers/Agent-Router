@@ -13,8 +13,9 @@ function buildUpstreamCall(
   secret: string,
   body: unknown,
   anthropicVersion = '2023-06-01',
+  rawBody?: string,
 ): UpstreamCall {
-  const payload = JSON.stringify(body ?? {});
+  const payload = rawBody ?? JSON.stringify(body ?? {});
   if (kind === 'ANTHROPIC') {
     const base = (baseUrl ?? 'https://api.anthropic.com').replace(/\/$/, '');
     return {
@@ -162,7 +163,9 @@ function parseUsage(kind: ProviderKind, responseJson: unknown): ParsedUsage {
     if (kind === 'OPENAI_CODEX') {
       const prompt = typeof usage.input_tokens === 'number' ? usage.input_tokens : 0;
       const completion = typeof usage.output_tokens === 'number' ? usage.output_tokens : 0;
-      return prompt === 0 && completion === 0 ? { promptTokens: 0, completionTokens: 0, estimated: true } : { promptTokens: prompt, completionTokens: completion, estimated: false };
+      return prompt === 0 && completion === 0
+        ? { promptTokens: 0, completionTokens: 0, estimated: true }
+        : { promptTokens: prompt, completionTokens: completion, estimated: false };
     }
     const prompt = typeof usage.prompt_tokens === 'number' ? usage.prompt_tokens : 0;
     const completion = typeof usage.completion_tokens === 'number' ? usage.completion_tokens : 0;
@@ -176,11 +179,131 @@ function parseUsage(kind: ProviderKind, responseJson: unknown): ParsedUsage {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+interface UsageTap {
+  stream: ReadableStream<Uint8Array>;
+  usage: Promise<ParsedUsage>;
+}
+
+/**
+Relays an upstream byte stream untouched while tracking usage from its SSE
+frames. Streaming clients are never buffered to account for tokens: every
+chunk is forwarded before it is inspected, and only frames that contain a
+`usage` object are parsed. Cancelling the relay settles the usage promise so
+the ledger is still written when a client disconnects.
+*/
+function tapUsageStream(body: ReadableStream<Uint8Array>): UsageTap {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let promptTokens = 0;
+  let completionTokens = 0;
+  let sawUsage = false;
+  let settled = false;
+  let resolveUsage!: (usage: ParsedUsage) => void;
+  // eslint-disable-next-line unicorn/prefer-promise-with-resolvers
+  const usage = new Promise<ParsedUsage>((resolve) => {
+    resolveUsage = resolve;
+  });
+
+  const observe = (record: Record<string, unknown>): void => {
+    for (const container of [record, record.response, record.message]) {
+      if (!isRecord(container) || !isRecord(container.usage)) continue;
+      const source = container.usage;
+      const input =
+        typeof source.input_tokens === 'number'
+          ? source.input_tokens
+          : typeof source.prompt_tokens === 'number'
+            ? source.prompt_tokens
+            : null;
+      const output =
+        typeof source.output_tokens === 'number'
+          ? source.output_tokens
+          : typeof source.completion_tokens === 'number'
+            ? source.completion_tokens
+            : null;
+      if (input === null && output === null) continue;
+      sawUsage = true;
+      if (input !== null) promptTokens = Math.max(promptTokens, input);
+      if (output !== null) completionTokens = Math.max(completionTokens, output);
+    }
+  };
+
+  const consumeLine = (line: string): void => {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('data:') || !trimmed.includes('"usage"')) return;
+    const payload = trimmed.slice(5).trim();
+    if (!payload || payload === '[DONE]') return;
+    try {
+      const parsed: unknown = JSON.parse(payload);
+      if (isRecord(parsed)) observe(parsed);
+    } catch {
+      // Non-JSON SSE frames carry no usage.
+    }
+  };
+
+  const feed = (text: string): void => {
+    buffer += text;
+    const lastNewline = buffer.lastIndexOf('\n');
+    if (lastNewline === -1) return;
+    const complete = buffer.slice(0, lastNewline);
+    buffer = buffer.slice(lastNewline + 1);
+    for (const line of complete.split('\n')) consumeLine(line);
+  };
+
+  const settle = (): void => {
+    if (settled) return;
+    settled = true;
+    if (buffer.trim()) consumeLine(buffer);
+    buffer = '';
+    resolveUsage({ promptTokens, completionTokens, estimated: !sawUsage });
+  };
+
+  const stream = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const read = await reader.read();
+        if (read.done) {
+          feed(decoder.decode());
+          settle();
+          controller.close();
+          return;
+        }
+        if (read.value) {
+          controller.enqueue(read.value);
+          feed(decoder.decode(read.value, { stream: true }));
+        }
+      } catch (error) {
+        settle();
+        controller.error(error);
+      }
+    },
+    cancel(reason) {
+      settle();
+      void reader.cancel(reason).catch(() => undefined);
+    },
+  });
+
+  return { stream, usage };
+}
+
 const RETRYABLE_STATUSES = new Set([429, 502, 503, 504]);
 
 function isRetryableStatus(status: number): boolean {
   return RETRYABLE_STATUSES.has(status);
 }
 
-export { buildUpstreamCall, buildCodexCall, parseUsage, isRetryableStatus, CODEX_BASE_URL, extractCodexCompletedResponse, extractHtmlPageText };
-export type { UpstreamCall, ParsedUsage };
+export {
+  buildUpstreamCall,
+  buildCodexCall,
+  parseUsage,
+  isRetryableStatus,
+  CODEX_BASE_URL,
+  extractCodexCompletedResponse,
+  extractHtmlPageText,
+  tapUsageStream,
+};
+export type { UpstreamCall, ParsedUsage, UsageTap };

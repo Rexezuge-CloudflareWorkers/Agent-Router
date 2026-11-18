@@ -7,6 +7,7 @@ declare global {
     DB: any;
     REPO: any;
     CRON_TASKS: any;
+    PROXY_GATEWAY: any;
     CHECK_RUNNER: any;
     REALTIME: any;
     DEBUG_MODE?: string;
