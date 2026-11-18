@@ -1,4 +1,4 @@
-export type ProviderKind = 'OPENAI' | 'ANTHROPIC' | 'GEMINI' | 'OPENAI_COMPAT' | 'OPENAI_CODEX';
+export type ProviderKind = 'OPENAI' | 'ANTHROPIC' | 'GEMINI' | 'OPENAI_COMPAT' | 'OPENAI_CODEX' | 'COMMAND_CODE';
 
 export type ProviderStatus = 'active' | 'disabled';
 
@@ -72,7 +72,14 @@ export interface UsageLedgerMetadata {
   createdAt: number;
 }
 
-export const PROVIDER_KINDS: readonly ProviderKind[] = ['OPENAI', 'ANTHROPIC', 'GEMINI', 'OPENAI_COMPAT', 'OPENAI_CODEX'];
+export const PROVIDER_KINDS: readonly ProviderKind[] = [
+  'OPENAI',
+  'ANTHROPIC',
+  'GEMINI',
+  'OPENAI_COMPAT',
+  'OPENAI_CODEX',
+  'COMMAND_CODE',
+];
 
 export function isProviderKind(value: unknown): value is ProviderKind {
   return typeof value === 'string' && (PROVIDER_KINDS as readonly string[]).includes(value);

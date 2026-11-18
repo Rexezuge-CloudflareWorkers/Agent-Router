@@ -1,4 +1,12 @@
-import { CodexDeviceSessionDAO, GatewayKeyDAO, ProviderDAO, ProviderKeyDAO, UsageLedgerDAO, UserDAO } from '@agent-router/backend-data/dao';
+import {
+  CodexDeviceSessionDAO,
+  CommandCodeKeyStateDAO,
+  GatewayKeyDAO,
+  ProviderDAO,
+  ProviderKeyDAO,
+  UsageLedgerDAO,
+  UserDAO,
+} from '@agent-router/backend-data/dao';
 import type { D1Queryable } from '@agent-router/backend-data/utils';
 import { Container, memoizeAsync } from '@agent-router/backend-runtime/di';
 import type { Token } from '@agent-router/backend-runtime/di';
@@ -6,6 +14,7 @@ import { AppConfiguration } from '@agent-router/backend-runtime/config';
 import { AccessAuthService } from '@agent-router/backend-services/auth';
 import { CodexOAuthService } from '@agent-router/backend-services/codex/CodexOAuthService';
 import { CodexTokenService } from '@agent-router/backend-services/codex/CodexTokenService';
+import { CommandCodeService } from '@agent-router/backend-services/commandcode/CommandCodeService';
 import { GatewayKeyService } from '@agent-router/backend-services/gateway';
 import { ProviderKeyService, ProviderService } from '@agent-router/backend-services/provider';
 import { RouterService } from '@agent-router/backend-services/router';
@@ -17,6 +26,7 @@ interface RequestScopeEnv {
   DB: D1Queryable;
   PROVIDER_KEYS_ENCRYPTION_SECRET?: { get(): Promise<string> };
   CODEX_OAUTH_ENCRYPTION_SECRET?: { get(): Promise<string> };
+  COMMAND_CODE_FINGERPRINT_SALT?: { get(): Promise<string> };
 }
 
 interface RequestKeys {
@@ -37,7 +47,10 @@ function createRequestScope(env: RequestScopeEnv): Container {
     if (!env.CODEX_OAUTH_ENCRYPTION_SECRET) throw new Error('CODEX_OAUTH_ENCRYPTION_SECRET is not configured for this scope.');
     return env.CODEX_OAUTH_ENCRYPTION_SECRET.get();
   });
-  const keys = memoizeAsync(async (): Promise<RequestKeys> => ({ providerKeysKey: await providerKeysKey(), codexOAuthKey: await codexOAuthKey() }));
+  const keys = memoizeAsync(async (): Promise<RequestKeys> => ({
+    providerKeysKey: await providerKeysKey(),
+    codexOAuthKey: await codexOAuthKey(),
+  }));
   scope.bindValue(Tokens.Keys, keys);
 
   const daoDefs: Array<[string, () => Promise<unknown>]> = [
@@ -46,6 +59,7 @@ function createRequestScope(env: RequestScopeEnv): Container {
     ['ProviderDAO', () => Promise.resolve(new ProviderDAO(env.DB))],
     ['ProviderKeyDAO', () => Promise.resolve(new ProviderKeyDAO(env.DB))],
     ['CodexDeviceSessionDAO', () => Promise.resolve(new CodexDeviceSessionDAO(env.DB))],
+    ['CommandCodeKeyStateDAO', () => Promise.resolve(new CommandCodeKeyStateDAO(env.DB))],
     ['UsageLedgerDAO', () => Promise.resolve(new UsageLedgerDAO(env.DB))],
   ];
   const daoFactories = {} as Record<string, () => Promise<unknown>>;
@@ -61,6 +75,7 @@ function createRequestScope(env: RequestScopeEnv): Container {
   const providerDAO = getDao<ProviderDAO>('ProviderDAO');
   const providerKeyDAO = getDao<ProviderKeyDAO>('ProviderKeyDAO');
   const codexSessionDAO = getDao<CodexDeviceSessionDAO>('CodexDeviceSessionDAO');
+  const commandCodeKeyStateDAO = getDao<CommandCodeKeyStateDAO>('CommandCodeKeyStateDAO');
   const usageDAO = getDao<UsageLedgerDAO>('UsageLedgerDAO');
 
   const config = AppConfiguration.fromEnv(env);
@@ -94,7 +109,21 @@ function createRequestScope(env: RequestScopeEnv): Container {
         config,
       }),
   );
-  scope.bind(Tokens.CodexTokenService, () => new CodexTokenService(env as never, { providerKeyDAO, masterKey: resolveCodexOAuthKey, config }));
+  scope.bind(
+    Tokens.CodexTokenService,
+    () => new CodexTokenService(env as never, { providerKeyDAO, masterKey: resolveCodexOAuthKey, config }),
+  );
+  scope.bind(
+    Tokens.CommandCodeService,
+    () =>
+      new CommandCodeService(env as never, {
+        config,
+        keyStateDAO: commandCodeKeyStateDAO,
+        salt: async () => {
+          return env.COMMAND_CODE_FINGERPRINT_SALT ? env.COMMAND_CODE_FINGERPRINT_SALT.get() : '';
+        },
+      }),
+  );
   scope.bind(
     Tokens.RouterService,
     () =>
@@ -105,6 +134,13 @@ function createRequestScope(env: RequestScopeEnv): Container {
         masterKey: resolveProviderKeysKey,
         config,
         codexTokens: new CodexTokenService(env as never, { providerKeyDAO, masterKey: resolveCodexOAuthKey, config }),
+        commandCode: new CommandCodeService(env as never, {
+          config,
+          keyStateDAO: commandCodeKeyStateDAO,
+          salt: async () => {
+            return env.COMMAND_CODE_FINGERPRINT_SALT ? env.COMMAND_CODE_FINGERPRINT_SALT.get() : '';
+          },
+        }),
       }),
   );
   scope.bind(Tokens.UsageService, () => new UsageService(env as never, { usageDAO }));

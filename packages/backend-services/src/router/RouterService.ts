@@ -6,7 +6,15 @@ import type { ProviderKind } from '@agent-router/shared';
 import { TimestampUtil, UUIDUtil } from '@agent-router/shared/utils';
 import { AppConfiguration } from '@agent-router/backend-runtime/config';
 import { KeyCrypto } from '../provider/KeyCrypto';
-import { buildCodexCall, buildUpstreamCall, extractCodexCompletedResponse, extractHtmlPageText, isRetryableStatus, parseUsage } from './UpstreamClient';
+import type { CommandCodeEndpoint, CommandCodeService } from '../commandcode';
+import {
+  buildCodexCall,
+  buildUpstreamCall,
+  extractCodexCompletedResponse,
+  extractHtmlPageText,
+  isRetryableStatus,
+  parseUsage,
+} from './UpstreamClient';
 import type { UpstreamCall } from './UpstreamClient';
 
 interface RouterServiceEnv {
@@ -27,6 +35,7 @@ interface RouterServiceDeps {
   config?: AppConfiguration;
   fetchImpl?: typeof fetch;
   codexTokens?: CodexAccessResolver;
+  commandCode?: CommandCodeService;
 }
 
 // Minimal structural surface of CodexTokenService so the router stays
@@ -50,11 +59,19 @@ interface ProxyRequest {
   upstreamBody: unknown;
   upstreamModel: string | null;
   bodyBytes: number;
+  /**
+  Client-facing endpoint; Command Code collapses all of them to /alpha/generate.
+  */
+  clientEndpoint?: CommandCodeEndpoint;
+  clientStream?: boolean;
+  incomingHeaders?: Record<string, string | undefined>;
+  signal?: AbortSignal;
 }
 
 interface ProxySuccess {
   status: number;
-  bodyText: string;
+  bodyText?: string;
+  bodyStream?: ReadableStream<Uint8Array>;
   contentType: string | null;
   promptTokens: number;
   completionTokens: number;
@@ -69,7 +86,8 @@ function cooldownForFailures(baseMs: number, failures: number): number {
 }
 
 class RouterService {
-  private readonly deps: Required<Omit<RouterServiceDeps, 'codexTokens'>> & Pick<RouterServiceDeps, 'codexTokens'>;
+  private readonly deps: Required<Omit<RouterServiceDeps, 'codexTokens' | 'commandCode'>> &
+    Pick<RouterServiceDeps, 'codexTokens' | 'commandCode'>;
 
   constructor(
     private readonly env: RouterServiceEnv,
@@ -94,6 +112,7 @@ class RouterService {
       // eslint-disable-next-line unicorn/no-unnecessary-global-this
       fetchImpl: deps.fetchImpl ?? globalThis.fetch.bind(globalThis),
       codexTokens: deps.codexTokens,
+      commandCode: deps.commandCode,
       ...deps,
     };
   }
@@ -162,7 +181,8 @@ class RouterService {
   }
 
   public async proxy(req: ProxyRequest): Promise<ProxySuccess> {
-    const maxBody = this.deps.config.getProxyMaxBodyBytes();
+    const maxBody =
+      req.providerKind === 'COMMAND_CODE' ? this.deps.config.getCommandCodeMaxBodyBytes() : this.deps.config.getProxyMaxBodyBytes();
     if (req.bodyBytes > maxBody) throw new BadRequestError('Request body too large');
     const maxAttempts = this.deps.config.getProxyMaxAttempts();
     const timeoutMs = this.deps.config.getProxyTimeoutMs();
@@ -201,6 +221,115 @@ class RouterService {
       const candidate = usable[i];
       const startedMs = Date.now();
       try {
+        if (req.providerKind === 'COMMAND_CODE') {
+          const commandCode = this.deps.commandCode;
+          if (!commandCode) throw new BadRequestError('Command Code is not configured for this request');
+          const secret = await KeyCrypto.decrypt(candidate.encrypted_key, masterKey, 'provider-keys');
+          await commandCode.ensureInitialized(secret, candidate.id, req.providerBaseUrl, req.signal);
+          const response = await commandCode.call({
+            endpoint: req.clientEndpoint ?? 'chat',
+            baseUrl: req.providerBaseUrl,
+            secret,
+            keyId: candidate.id,
+            body: req.upstreamBody,
+            incomingHeaders: req.incomingHeaders ?? {},
+            stream: req.clientStream === true,
+            signal: req.signal,
+          });
+          const latencyMs = Date.now() - startedMs;
+          if (!response.ok) {
+            lastStatus = response.status;
+            lastError = response.message;
+            if (response.retryable) {
+              const failures = candidate.consecutive_failures + 1;
+              const cooldownUntil =
+                failures >= disableAfter
+                  ? null
+                  : TimestampUtil.getCurrentUnixTimestampInSeconds() + Math.ceil(cooldownForFailures(cooldownBase, failures) / 1000);
+              await keyDAO
+                .recordFailure(candidate.id, `Upstream ${response.status}`, cooldownUntil, TimestampUtil.getCurrentUnixTimestampInSeconds())
+                .catch(() => undefined);
+              await usageDAO
+                .insert({
+                  id: UUIDUtil.getRandomUUID(),
+                  userEmail: req.userEmail,
+                  gatewayKeyId: req.gatewayKeyId,
+                  providerId: req.providerId,
+                  providerKeyId: candidate.id,
+                  upstreamModel: req.upstreamModel,
+                  promptTokens: 0,
+                  completionTokens: 0,
+                  latencyMs,
+                  statusCode: response.status,
+                  errorCode: `UPSTREAM_${response.status}`,
+                  estimated: false,
+                  now: TimestampUtil.getCurrentUnixTimestampInSeconds(),
+                })
+                .catch(() => undefined);
+              continue;
+            }
+            await usageDAO
+              .insert({
+                id: UUIDUtil.getRandomUUID(),
+                userEmail: req.userEmail,
+                gatewayKeyId: req.gatewayKeyId,
+                providerId: req.providerId,
+                providerKeyId: candidate.id,
+                upstreamModel: req.upstreamModel,
+                promptTokens: 0,
+                completionTokens: 0,
+                latencyMs,
+                statusCode: response.status,
+                errorCode: `UPSTREAM_${response.status}`,
+                estimated: false,
+                now: TimestampUtil.getCurrentUnixTimestampInSeconds(),
+              })
+              .catch(() => undefined);
+            const error = new BadRequestError(response.message.slice(0, 300));
+            (error as unknown as { statusCode?: number }).statusCode = response.status;
+            throw error;
+          }
+
+          const success = response.result;
+          const recordSuccess = async (usage: { promptTokens: number; completionTokens: number; estimated: boolean }): Promise<void> => {
+            await keyDAO
+              .recordSuccess(candidate.id, usage.promptTokens, usage.completionTokens, TimestampUtil.getCurrentUnixTimestampInSeconds())
+              .catch(() => undefined);
+            const refreshed = await keyDAO.getById(candidate.id).catch(() => null);
+            if (refreshed && this.isCapExceeded(refreshed)) {
+              await keyDAO.markExhausted(candidate.id, TimestampUtil.getCurrentUnixTimestampInSeconds()).catch(() => undefined);
+            }
+            await usageDAO
+              .insert({
+                id: UUIDUtil.getRandomUUID(),
+                userEmail: req.userEmail,
+                gatewayKeyId: req.gatewayKeyId,
+                providerId: req.providerId,
+                providerKeyId: candidate.id,
+                upstreamModel: req.upstreamModel,
+                promptTokens: usage.promptTokens,
+                completionTokens: usage.completionTokens,
+                latencyMs,
+                statusCode: 200,
+                errorCode: null,
+                estimated: usage.estimated,
+                now: TimestampUtil.getCurrentUnixTimestampInSeconds(),
+              })
+              .catch(() => undefined);
+          };
+          if ('usagePromise' in success) void success.usagePromise.then(recordSuccess).catch(() => undefined);
+          else await recordSuccess(success);
+          return {
+            status: 200,
+            ...('bodyStream' in success ? { bodyStream: success.bodyStream } : { bodyText: success.bodyText }),
+            contentType: success.contentType,
+            promptTokens: success.promptTokens,
+            completionTokens: success.completionTokens,
+            estimated: success.estimated,
+            providerKeyId: candidate.id,
+            attempts: i + 1,
+          };
+        }
         let call = await this.buildCallForCandidate(candidate, req, masterKey);
         lastAccountRouted = 'ChatGPT-Account-Id' in call.headers;
         let upstream = await this.fetchWithTimeout(call, timeoutMs);

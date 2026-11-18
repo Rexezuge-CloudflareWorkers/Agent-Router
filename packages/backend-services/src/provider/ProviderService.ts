@@ -24,6 +24,8 @@ const DEFAULT_BASE_URLS: Record<ProviderKind, string | null> = {
   // ChatGPT subscription (Codex OAuth) tokens are honored by the Codex
   // backend, not the OpenAI platform API.
   OPENAI_CODEX: 'https://chatgpt.com/backend-api/codex',
+  // Command Code's CLI API (OpenAI/Anthropic-compatible through this router).
+  COMMAND_CODE: 'https://api.commandcode.ai',
 };
 
 const PRIVATE_HOSTS = new Set(['localhost', '127.0.0.1', '0.0.0.0', '[::1]']);
@@ -68,7 +70,9 @@ class ProviderService {
   }
 
   public async createProvider(userEmail: string, kind: unknown, name: unknown, baseUrl?: unknown): Promise<ProviderMetadata> {
-    if (!isProviderKind(kind)) throw new BadRequestError('kind must be one of OPENAI, ANTHROPIC, GEMINI, OPENAI_COMPAT, OPENAI_CODEX');
+    if (!isProviderKind(kind)) {
+      throw new BadRequestError('kind must be one of OPENAI, ANTHROPIC, GEMINI, OPENAI_COMPAT, OPENAI_CODEX, COMMAND_CODE');
+    }
     const trimmed = typeof name === 'string' ? name.trim() : '';
     if (!trimmed) throw new BadRequestError('name is required');
     if (trimmed.length > 80) throw new BadRequestError('name must be at most 80 characters');

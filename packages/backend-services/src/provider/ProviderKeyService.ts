@@ -68,6 +68,15 @@ class ProviderKeyService {
     if (provider.kind === 'OPENAI_CODEX') throw new BadRequestError('OPENAI_CODEX providers use Codex OAuth keys; connect via the Codex authorize flow');
   }
 
+  private async assertSecretForProvider(providerId: string, userEmail: string, secret: string): Promise<void> {
+    const dao = await this.deps.providerDAO();
+    const provider = await dao.getById(providerId);
+    if (!provider || provider.userEmail.toLowerCase() !== userEmail.toLowerCase()) throw new NotFoundError('Provider not found');
+    if (provider.kind === 'COMMAND_CODE' && !secret.startsWith('user_')) {
+      throw new BadRequestError('Command Code keys must start with user_');
+    }
+  }
+
   public async addKey(
     providerId: string,
     userEmail: string,
@@ -81,6 +90,7 @@ class ProviderKeyService {
     const secret = typeof input.secret === 'string' ? input.secret.trim() : '';
     if (!secret) throw new BadRequestError('secret is required');
     if (secret.length > 4096) throw new BadRequestError('secret is too long');
+    await this.assertSecretForProvider(providerId, normalized, secret);
     const tokenLimit = parseOptionalLimit(input.tokenLimit, 'tokenLimit');
     const requestLimit = parseOptionalLimit(input.requestLimit, 'requestLimit');
     const resetInDays = parseOptionalLimit(input.resetInDays, 'resetInDays');
@@ -163,6 +173,7 @@ class ProviderKeyService {
     const raw = typeof secret === 'string' ? secret.trim() : '';
     if (!raw) throw new BadRequestError('secret is required');
     if (raw.length > 4096) throw new BadRequestError('secret is too long');
+    await this.assertSecretForProvider(providerId, userEmail.toLowerCase(), raw);
     const dao = await this.deps.providerKeyDAO();
     const current = await dao.getById(keyId);
     if (!current || current.provider_id !== providerId) throw new NotFoundError('Provider key not found');

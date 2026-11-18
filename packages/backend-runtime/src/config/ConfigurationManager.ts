@@ -120,6 +120,21 @@ class ConfigurationManager {
     getCodexAccessMinValidSeconds: (env: unknown): number => AppConfiguration.fromEnv(env).getCodexAccessMinValidSeconds(),
     getCodexRefreshBatchSize: (env: unknown): number => AppConfiguration.fromEnv(env).getCodexRefreshBatchSize(),
   };
+
+  public static readonly commandCode = {
+    getProtocolVersion: (env: unknown): string => AppConfiguration.fromEnv(env).getCommandCodeProtocolVersion(),
+    getDeviceProjectDir: (env: unknown): string => AppConfiguration.fromEnv(env).getCommandCodeDeviceProjectDir(),
+    getCliMode: (env: unknown): string => AppConfiguration.fromEnv(env).getCommandCodeCliMode(),
+    getCliSessionMode: (env: unknown): string => AppConfiguration.fromEnv(env).getCommandCodeCliSessionMode(),
+    isEmptySystemPlaceholderEnabled: (env: unknown): boolean => AppConfiguration.fromEnv(env).isCommandCodeEmptySystemPlaceholderEnabled(),
+    isZdrEnabled: (env: unknown): boolean => AppConfiguration.fromEnv(env).isCommandCodeZdrEnabled(),
+    getMaxBodyBytes: (env: unknown): number => AppConfiguration.fromEnv(env).getCommandCodeMaxBodyBytes(),
+    getTimeoutMs: (env: unknown): number => AppConfiguration.fromEnv(env).getCommandCodeTimeoutMs(),
+    getStreamIdleMs: (env: unknown): number => AppConfiguration.fromEnv(env).getCommandCodeStreamIdleMs(),
+    getNonStreamIdleMs: (env: unknown): number => AppConfiguration.fromEnv(env).getCommandCodeNonStreamIdleMs(),
+    getMaxToolImageMb: (env: unknown): number => AppConfiguration.fromEnv(env).getCommandCodeMaxToolImageMb(),
+    getModelsTtlMs: (env: unknown): number => AppConfiguration.fromEnv(env).getCommandCodeModelsTtlMs(),
+  };
 }
 
 export { ConfigurationManager };

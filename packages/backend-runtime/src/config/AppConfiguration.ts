@@ -30,6 +30,7 @@ import {
 } from './ConfigurationDefaults';
 
 import { AuthConfig } from './sections/AuthConfig';
+import { CommandCodeLimits } from './sections/CommandCodeLimits';
 import { GitLimits } from './sections/GitLimits';
 import { RealtimeLimits } from './sections/RealtimeLimits';
 import { RepoLimits } from './sections/RepoLimits';
@@ -52,6 +53,7 @@ class AppConfiguration {
   private readonly realtime: RealtimeLimits;
   private readonly auth: AuthConfig;
   private readonly router: RouterLimits;
+  private readonly commandCode: CommandCodeLimits;
 
   constructor(private readonly env: unknown) {
     this.repos = new RepoLimits(env);
@@ -60,6 +62,7 @@ class AppConfiguration {
     this.realtime = new RealtimeLimits(env);
     this.auth = new AuthConfig(env);
     this.router = new RouterLimits(env);
+    this.commandCode = new CommandCodeLimits(env);
   }
 
   public static fromEnv(env: unknown): AppConfiguration {
@@ -84,6 +87,10 @@ class AppConfiguration {
 
   public get routerLimits(): RouterLimits {
     return this.router;
+  }
+
+  public get commandCodeLimits(): CommandCodeLimits {
+    return this.commandCode;
   }
 
   public get authConfig(): AuthConfig {
@@ -362,6 +369,54 @@ class AppConfiguration {
 
   public getMaxGatewayKeyExpiryDays(): number {
     return this.router.getMaxGatewayKeyExpiryDays();
+  }
+
+  public getCommandCodeProtocolVersion(): string {
+    return this.commandCode.getProtocolVersion();
+  }
+
+  public getCommandCodeDeviceProjectDir(): string {
+    return this.commandCode.getDeviceProjectDir();
+  }
+
+  public getCommandCodeCliMode(): string {
+    return this.commandCode.getCliMode();
+  }
+
+  public getCommandCodeCliSessionMode(): string {
+    return this.commandCode.getCliSessionMode();
+  }
+
+  public isCommandCodeEmptySystemPlaceholderEnabled(): boolean {
+    return this.commandCode.isEmptySystemPlaceholderEnabled();
+  }
+
+  public isCommandCodeZdrEnabled(): boolean {
+    return this.commandCode.isZdrEnabled();
+  }
+
+  public getCommandCodeMaxBodyBytes(): number {
+    return this.commandCode.getMaxBodyBytes();
+  }
+
+  public getCommandCodeTimeoutMs(): number {
+    return this.commandCode.getTimeoutMs();
+  }
+
+  public getCommandCodeStreamIdleMs(): number {
+    return this.commandCode.getStreamIdleMs();
+  }
+
+  public getCommandCodeNonStreamIdleMs(): number {
+    return this.commandCode.getNonStreamIdleMs();
+  }
+
+  public getCommandCodeMaxToolImageMb(): number {
+    return this.commandCode.getMaxToolImageMb();
+  }
+
+  public getCommandCodeModelsTtlMs(): number {
+    return this.commandCode.getModelsTtlMs();
   }
 
   public getProxyTimeoutMs(): number {
