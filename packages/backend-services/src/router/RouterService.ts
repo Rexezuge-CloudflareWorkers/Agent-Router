@@ -479,6 +479,9 @@ class RouterService {
         throw error;
       } catch (error) {
         if (error instanceof BadRequestError && (error as unknown as { statusCode?: number }).statusCode) throw error;
+        // A client disconnect aborts the upstream call; that says nothing about
+        // key health, so do not penalize the key with a cooldown.
+        if (req.signal?.aborted) throw error;
         const message = error instanceof Error ? error.message : 'Upstream request failed';
         lastError = message.slice(0, 300);
         lastStatus = 502;

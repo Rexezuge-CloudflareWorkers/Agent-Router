@@ -34,7 +34,7 @@ function row(id: string, overrides: Record<string, unknown> = {}) {
   };
 }
 
-function makeService(keys: Array<ReturnType<typeof row>>, fetchImpl: typeof fetch) {
+function makeService(keys: Array<ReturnType<typeof row>>, fetchImpl: typeof fetch, extraDeps: Record<string, unknown> = {}) {
   const events: string[] = [];
   const usage: Array<Record<string, unknown>> = [];
   const keyDAO = {
@@ -59,6 +59,7 @@ function makeService(keys: Array<ReturnType<typeof row>>, fetchImpl: typeof fetc
     masterKey: async () => MASTER,
     config: AppConfiguration.fromEnv(env),
     fetchImpl,
+    ...extraDeps,
   });
   return { svc, events, usage };
 }
@@ -198,6 +199,36 @@ describe('RouterService failover', () => {
         bodyBytes: 10,
       }),
     ).rejects.toThrow(/Bad model/);
+    expect(events).not.toContain('failure:k1');
+  });
+
+  it('skips key cooldown when the client aborts a Command Code request', async () => {
+    const k1 = row('k1');
+    k1.encrypted_key = await enc('user_key');
+    const controller = new AbortController();
+    controller.abort();
+    const commandCode = {
+      ensureInitialized: async () => undefined,
+      call: async () => {
+        throw new DOMException('The operation was aborted', 'AbortError');
+      },
+    };
+    const { svc, events } = makeService([k1], vi.fn() as unknown as typeof fetch, { commandCode });
+    await expect(
+      svc.proxy({
+        userEmail: 'u@x.y',
+        gatewayKeyId: 'gw1',
+        providerId: 'p1',
+        providerKind: 'COMMAND_CODE',
+        providerBaseUrl: 'https://api.commandcode.ai',
+        upstreamPath: '/alpha/generate',
+        upstreamBody: { model: 'recursive/flint-v1.0:free', messages: [{ role: 'user', content: 'hi' }] },
+        upstreamModel: 'recursive/flint-v1.0:free',
+        bodyBytes: 10,
+        clientEndpoint: 'chat',
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow(/aborted/i);
     expect(events).not.toContain('failure:k1');
   });
 });

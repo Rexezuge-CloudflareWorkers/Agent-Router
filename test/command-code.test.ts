@@ -131,6 +131,24 @@ describe('Command Code request conversion', () => {
     expect(messages[1]).toMatchObject({ role: 'assistant', reasoning_content: 'hmm' });
     expect(messages[2]).toMatchObject({ role: 'tool', content: 'result' });
   });
+
+  it('keeps plain-string Anthropic message content', () => {
+    const chat = convertAnthropicToChat({
+      model: 'recursive/flint-v1.0:free',
+      system: 'be nice',
+      messages: [
+        { role: 'user', content: 'hello' },
+        { role: 'assistant', content: 'hi there' },
+        { role: 'user', content: 'bye' },
+      ],
+    });
+    expect(chat.messages).toEqual([
+      { role: 'system', content: 'be nice' },
+      { role: 'user', content: 'hello' },
+      { role: 'assistant', content: 'hi there' },
+      { role: 'user', content: 'bye' },
+    ]);
+  });
 });
 
 describe('Command Code events and translators', () => {
