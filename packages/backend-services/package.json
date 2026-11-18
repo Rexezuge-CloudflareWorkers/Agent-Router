@@ -20,6 +20,8 @@
     "./commandcode/*": "./src/commandcode/*.ts",
     "./router": "./src/router/index.ts",
     "./router/*": "./src/router/*.ts",
+    "./proxy": "./src/proxy/index.ts",
+    "./proxy/*": "./src/proxy/*.ts",
     "./usage": "./src/usage/index.ts",
     "./usage/*": "./src/usage/*.ts",
     "./composition": "./src/composition/index.ts",

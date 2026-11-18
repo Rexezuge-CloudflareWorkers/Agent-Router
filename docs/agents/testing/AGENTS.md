@@ -4,7 +4,7 @@ Scope: unit tests (`test/*.test.ts`, `pnpm test`) + Workers integration tests (`
 
 ## Integration Tests (`test/integration/`, ported from Otter)
 
-- Harness: `vitest.config.mts` (`@cloudflare/vitest-pool-workers`, `*.int.test.ts`), `wrangler.test.jsonc` (D1 `DB` + `PROVIDER_KEYS_ENCRYPTION_SECRET` + `CODEX_OAUTH_ENCRYPTION_SECRET`; no `CRON_TASKS` binding — fetch paths under test never touch it), `self.ts` (re-exports the API entry), `helpers/migrations.ts` (comment-aware SQL splitter), `helpers/setup.ts` (migrations + secrets-store + user seed).
+- Harness: `vitest.config.mts` (`@cloudflare/vitest-pool-workers`, `*.int.test.ts`), `wrangler.test.jsonc` (D1 `DB` + `PROVIDER_KEYS_ENCRYPTION_SECRET` + `CODEX_OAUTH_ENCRYPTION_SECRET` + DO `PROXY_GATEWAY`; no `CRON_TASKS` binding — the scheduled entrypoint is not exercised), `self.ts` (re-exports the API entry, including the `ProxyGateway` class the binding resolves), `helpers/migrations.ts` (comment-aware SQL splitter), `helpers/setup.ts` (migrations + secrets-store + user seed).
 - Migration SQL is concatenated from top-level `migrations/*.sql` only — never `migrations/_archive/`.
 - V8 coverage does not work under the workers pool; run without `--coverage` (thresholds omitted intentionally).
 - Suites: `health.int.test.ts` smoke (migrations incl. `codex_oauth_sessions`, `/health`, proxy 401, Codex callback redirect). Still thin: authed `/user/*` flows, Codex authorize/callback/proxy, cron tasks.

@@ -5,7 +5,7 @@ Agent-Router: OpenRouter-style LLM gateway (`@agent-router/monorepo`, `pnpm@11.2
 - **Gateway core**: `packages/router` logic lives in `packages/backend-services/src/router` (`RouterService` failover loop + `UpstreamClient` per-kind calls) over `packages/backend-data` DAOs (`ProviderDAO`, `ProviderKeyDAO`, `GatewayKeyDAO`, `UsageLedgerDAO`, `UserDAO`). Command Code lives in `packages/backend-services/src/commandcode` (`CommandCodeService`, deterministic device fingerprint, envelope/headers, NDJSON accumulators, per-endpoint translators).
 - **Storage**: D1 `migrations/0001_agent_router.sql` (`users`, `gateway_keys`, `providers`, `provider_keys`, `usage_ledger`; legacy schema archived in `migrations/_archive/`) + `migrations/0002_codex_oauth.sql` (OAuth columns on `provider_keys`, `codex_oauth_sessions`) + `migrations/0004_command_code.sql` (`command_code_key_state` fingerprint/lifecycle throttle). Upstream secrets AES-GCM encrypted via Secrets Store (`PROVIDER_KEYS_ENCRYPTION_SECRET` for static keys, `CODEX_OAUTH_ENCRYPTION_SECRET` for Codex OAuth tokens, `COMMAND_CODE_FINGERPRINT_SALT` for deterministic CLI device fingerprints, `KeyCrypto` with per-feature purpose).
 - **Auth**: `/user/*` Cloudflare Access (`AccessAuthService`: DEMO→DEV→JWT→`ctx.access` fallback; never trust `Cf-Access-Authenticated-User-Email`); proxy paths use gateway-key Bearer (`GatewayKeyService`, sha256 `agent-router-gw:` prefix, `ar_…` display).
-- **API**: `apps/api` Hono `AgentRouterWorker` (`POST /v1/chat/completions|embeddings|responses`, `GET /v1/models`, `GET /commandcode/v1/models`, `POST /anthropic/v1/messages`, `POST /gemini/v1beta/models/:action` + `/user/providers|gateway-keys|usage|me` (providers include Codex device-code + token-import endpoints) + `/health`, `/docs`); model-prefix routing with `x-provider-id` override (`OPENAI` falls back to `OPENAI_CODEX` for `/v1/responses` only, and to `COMMAND_CODE` for namespaced models; `ANTHROPIC` falls back to `COMMAND_CODE`; Codex serves the Codex backend, not platform chat/embeddings). Command Code streams via `/alpha/generate` and is translated to OpenAI/Anthropic/Responses SSE or JSON.
+- **API**: `apps/api` Hono `AgentRouterWorker` (`POST /v1/chat/completions|embeddings|responses`, `GET /v1/models`, `GET /commandcode/v1/models`, `POST /anthropic/v1/messages`, `POST /gemini/v1beta/models/:action` + `/user/providers|gateway-keys|usage|me` (providers include Codex device-code + token-import endpoints) + `/health`, `/docs`); model-prefix routing with `x-provider-id` override (`OPENAI` falls back to `OPENAI_CODEX` for `/v1/responses` only, and to `COMMAND_CODE` for namespaced models; `ANTHROPIC` falls back to `COMMAND_CODE`; Codex serves the Codex backend, not platform chat/embeddings). Command Code streams via `/alpha/generate` and is translated to OpenAI/Anthropic/Responses SSE or JSON. Proxy generation routes are authenticated at the edge and forwarded to the `PROXY_GATEWAY` Durable Object (`apps/api/src/workers/ProxyGateway.ts`, sharded `idFromName('key:'+gatewayKeyId)`), which owns body parsing, provider resolution and the upstream call; `ProxyOperations` in `packages/backend-services/src/proxy` is the transport-agnostic core.
 - **Web**: `apps/web` Vite SPA, build embeds `dist/index.html` → `apps/api/src/generated/spa-shell.ts`.
 - **Composition**: single scope per request via `scopeMiddleware` (`getScope(c).get(Tokens.X)`; `createRequestScope(env)` is the composition root, table-driven DAO wiring); `Container` + `createServiceContext` + `AppConfiguration` + `memoizeAsync`/`NullLogger`/`FixedClock` in `@agent-router/backend-runtime/di+config` are the DI foundation. See `docs/agents/runtime/AGENTS.md`.
 - **i18n**: web i18next (`en`+`zh-CN` bundles, single `canonicalizeLanguageTag` in `i18n.ts`); English UI text uses Title Case. See `apps/web/AGENTS.md`.
@@ -49,12 +49,12 @@ Enforced by ESLint `no-restricted-imports` in `eslint.config.mjs`.
 
 ## Index
 
-| Area                                            | Guide                                 |
-| ----------------------------------------------- | ------------------------------------- |
-| API worker, auth, routes                        | `apps/api/AGENTS.md`                  |
-| Background worker, cron phases                  | `apps/background/AGENTS.md`           |
-| Web SPA, router, i18n/Title Case conventions    | `apps/web/AGENTS.md`                  |
-| Business logic, service domain map              | `packages/backend-services/AGENTS.md` |
-| D1/DAO layer                                    | `packages/backend-data/AGENTS.md`     |
-| Bindings, wrangler, env vars, DI                | `docs/agents/runtime/AGENTS.md`       |
-| Tests, thresholds, mock patterns                | `docs/agents/testing/AGENTS.md`       |
+| Area                                         | Guide                                 |
+| -------------------------------------------- | ------------------------------------- |
+| API worker, auth, routes                     | `apps/api/AGENTS.md`                  |
+| Background worker, cron phases               | `apps/background/AGENTS.md`           |
+| Web SPA, router, i18n/Title Case conventions | `apps/web/AGENTS.md`                  |
+| Business logic, service domain map           | `packages/backend-services/AGENTS.md` |
+| D1/DAO layer                                 | `packages/backend-data/AGENTS.md`     |
+| Bindings, wrangler, env vars, DI             | `docs/agents/runtime/AGENTS.md`       |
+| Tests, thresholds, mock patterns             | `docs/agents/testing/AGENTS.md`       |

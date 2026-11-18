@@ -5,25 +5,30 @@
   "compatibility_date": "2025-11-29",
   "compatibility_flags": ["nodejs_compat"],
   // NOTE: no CRON_TASKS durable object binding — fetch paths under test never
-  // touch it (only the scheduled() entrypoint does).
+  // touch it (only the scheduled() entrypoint does). The proxy binding is
+  // declared because /v1/* forwards generation requests to it.
+  "durable_objects": {
+    "bindings": [{ "name": "PROXY_GATEWAY", "class_name": "ProxyGateway" }],
+  },
+  "migrations": [{ "tag": "v1000000001", "new_sqlite_classes": ["ProxyGateway"] }],
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "agent-router-test-db",
-      "database_id": "00000000-0000-0000-0000-000000000000"
-    }
+      "database_id": "00000000-0000-0000-0000-000000000000",
+    },
   ],
   "secrets_store_secrets": [
     {
       "binding": "PROVIDER_KEYS_ENCRYPTION_SECRET",
       "store_id": "00000000-0000-0000-0000-000000000000",
-      "secret_name": "test-provider-keys-encryption-key"
+      "secret_name": "test-provider-keys-encryption-key",
     },
     {
       "binding": "CODEX_OAUTH_ENCRYPTION_SECRET",
       "store_id": "00000000-0000-0000-0000-000000000000",
-      "secret_name": "test-codex-oauth-encryption-key"
-    }
+      "secret_name": "test-codex-oauth-encryption-key",
+    },
   ],
   "vars": {
     "DEV_AUTH_EMAIL": "test@example.com",
@@ -56,6 +61,6 @@
     "COMMAND_CODE_STREAM_IDLE_MS": "30000",
     "COMMAND_CODE_NONSTREAM_IDLE_MS": "90000",
     "COMMAND_CODE_MAX_TOOL_IMAGE_MB": "6",
-    "COMMAND_CODE_MODELS_TTL_MS": "300000"
-  }
+    "COMMAND_CODE_MODELS_TTL_MS": "300000",
+  },
 }

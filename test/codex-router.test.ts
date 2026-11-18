@@ -41,7 +41,11 @@ function row(id: string, overrides: Record<string, unknown> = {}) {
   };
 }
 
-function makeService(keys: Array<ReturnType<typeof row>>, fetchImpl: typeof fetch, codexTokens?: { getAccessToken: ReturnType<typeof vi.fn> }) {
+function makeService(
+  keys: Array<ReturnType<typeof row>>,
+  fetchImpl: typeof fetch,
+  codexTokens?: { getAccessToken: ReturnType<typeof vi.fn> },
+) {
   const events: string[] = [];
   const keyDAO = {
     listActiveByProvider: async () => keys,
@@ -53,7 +57,8 @@ function makeService(keys: Array<ReturnType<typeof row>>, fetchImpl: typeof fetc
   };
   const env = { DB: {} as never };
   const svc = new RouterService(env, {
-    providerDAO: () => Promise.resolve({ getById: async () => ({ id: 'p1', user_email: 'u@x.y', userEmail: 'u@x.y', status: 'active' }) } as never),
+    providerDAO: () =>
+      Promise.resolve({ getById: async () => ({ id: 'p1', user_email: 'u@x.y', userEmail: 'u@x.y', status: 'active' }) } as never),
     providerKeyDAO: () => Promise.resolve(keyDAO as never),
     usageDAO: () => Promise.resolve({ insert: async () => undefined } as never),
     masterKey: async () => MASTER,
@@ -120,7 +125,8 @@ describe('RouterService Codex OAuth', () => {
 
   it('assembles Codex SSE to JSON for non-streaming clients and relays for streaming ones', async () => {
     const k1 = row('k1', { encrypted_refresh_token: await enc('rt-1') });
-    const sse = 'event: response.completed\ndata: {"type":"response.completed","response":{"id":"r1","usage":{"input_tokens":2,"output_tokens":1}}}\n';
+    const sse =
+      'event: response.completed\ndata: {"type":"response.completed","response":{"id":"r1","usage":{"input_tokens":2,"output_tokens":1}}}\n';
     const fetchImpl = vi.fn(async () => new Response(sse, { status: 200, headers: { 'content-type': 'text/event-stream' } }));
     const codexTokens = { getAccessToken: vi.fn(async () => ({ accessToken: 'at-live', accountId: 'acc-1' })) };
     const { svc } = makeService([k1], fetchImpl as unknown as typeof fetch, codexTokens);
@@ -128,9 +134,28 @@ describe('RouterService Codex OAuth', () => {
     expect(json.status).toBe(200);
     expect(json.contentType).toBe('application/json');
     expect(JSON.parse(json.bodyText)).toEqual({ id: 'r1', usage: { input_tokens: 2, output_tokens: 1 } });
-    const relayed = await svc.proxy({ ...proxyInput(), upstreamBody: { model: 'gpt-5', input: 'hi', stream: true } });
+    const relayed = await svc.proxy({ ...proxyInput(), clientStream: true, upstreamBody: { model: 'gpt-5', input: 'hi', stream: true } });
     expect(relayed.contentType).toBe('text/event-stream');
-    expect(relayed.bodyText).toBe(sse);
+    expect(relayed.bodyStream).toBeInstanceOf(ReadableStream);
+    expect(await new Response(relayed.bodyStream ?? null).text()).toBe(sse);
+  });
+
+  it('never buffers a streaming response', async () => {
+    const k1 = row('k1', { encrypted_refresh_token: await enc('rt-1') });
+    const sse = 'data: {"type":"response.completed","response":{"usage":{"input_tokens":2,"output_tokens":1}}}\n\n';
+    const fetchImpl = vi.fn(async () => {
+      const response = new Response(sse, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+      response.text = () => {
+        throw new Error('streaming responses must not be buffered');
+      };
+      return response;
+    });
+    const codexTokens = { getAccessToken: vi.fn(async () => ({ accessToken: 'at-live', accountId: 'acc-1' })) };
+    const { svc, events } = makeService([k1], fetchImpl as unknown as typeof fetch, codexTokens);
+    const result = await svc.proxy({ ...proxyInput(), clientStream: true, upstreamBody: { model: 'gpt-5', input: 'hi', stream: true } });
+
+    expect(await new Response(result.bodyStream ?? null).text()).toBe(sse);
+    await vi.waitFor(() => expect(events).toContain('success:k1'));
   });
 
   it('names access challenges when the login page arrives despite a linked account', async () => {
@@ -174,7 +199,8 @@ describe('RouterService Codex OAuth', () => {
     const fetchImpl = vi.fn(async () => jsonResponse(200, { output: [], usage: { prompt_tokens: 1, completion_tokens: 0 } }));
     const codexTokens = {
       getAccessToken: vi.fn(async (_p: string, keyId: string) => {
-        if (keyId === 'k1') throw Object.assign(new Error('Codex authorization expired or was revoked. Reconnect the key.'), { name: 'BadRequestError' });
+        if (keyId === 'k1')
+          throw Object.assign(new Error('Codex authorization expired or was revoked. Reconnect the key.'), { name: 'BadRequestError' });
         return { accessToken: 'at-2', accountId: 'acc-1' };
       }),
     };

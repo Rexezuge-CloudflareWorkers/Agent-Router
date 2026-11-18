@@ -5,5 +5,6 @@ export * from './provider/index';
 export * from './codex/index';
 export * from './commandcode/index';
 export * from './router/index';
+export * from './proxy/index';
 export * from './usage/index';
 export * from './composition/index';

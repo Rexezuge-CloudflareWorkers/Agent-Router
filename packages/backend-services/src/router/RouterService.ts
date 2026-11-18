@@ -14,8 +14,9 @@ import {
   extractHtmlPageText,
   isRetryableStatus,
   parseUsage,
+  tapUsageStream,
 } from './UpstreamClient';
-import type { UpstreamCall } from './UpstreamClient';
+import type { ParsedUsage, UpstreamCall } from './UpstreamClient';
 
 interface RouterServiceEnv {
   DB: D1Queryable;
@@ -59,6 +60,11 @@ interface ProxyRequest {
   upstreamBody: unknown;
   upstreamModel: string | null;
   bodyBytes: number;
+  /**
+  The request body exactly as the client sent it. Reused for providers that
+  do not rewrite the payload so it is serialized once instead of twice.
+  */
+  rawBodyText?: string;
   /**
   Client-facing endpoint; Command Code collapses all of them to /alpha/generate.
   */
@@ -144,7 +150,42 @@ class RouterService {
       return buildCodexCall(req.providerBaseUrl, req.upstreamPath, tokens.accessToken, tokens.accountId, req.upstreamBody);
     }
     const secret = await KeyCrypto.decrypt(candidate.encrypted_key, masterKey, 'provider-keys');
-    return buildUpstreamCall(req.providerKind, req.providerBaseUrl, req.upstreamPath, secret, req.upstreamBody);
+    return buildUpstreamCall(req.providerKind, req.providerBaseUrl, req.upstreamPath, secret, req.upstreamBody, undefined, req.rawBodyText);
+  }
+
+  private async recordUsage(
+    keyDAO: ProviderKeyDAO,
+    usageDAO: UsageLedgerDAO,
+    candidate: ProviderKeyRow,
+    req: ProxyRequest,
+    usage: ParsedUsage,
+    latencyMs: number,
+    statusCode = 200,
+  ): Promise<void> {
+    await keyDAO
+      .recordSuccess(candidate.id, usage.promptTokens, usage.completionTokens, TimestampUtil.getCurrentUnixTimestampInSeconds())
+      .catch(() => undefined);
+    const refreshed = await keyDAO.getById(candidate.id).catch(() => null);
+    if (refreshed && this.isCapExceeded(refreshed)) {
+      await keyDAO.markExhausted(candidate.id, TimestampUtil.getCurrentUnixTimestampInSeconds()).catch(() => undefined);
+    }
+    await usageDAO
+      .insert({
+        id: UUIDUtil.getRandomUUID(),
+        userEmail: req.userEmail,
+        gatewayKeyId: req.gatewayKeyId,
+        providerId: req.providerId,
+        providerKeyId: candidate.id,
+        upstreamModel: req.upstreamModel,
+        promptTokens: usage.promptTokens,
+        completionTokens: usage.completionTokens,
+        latencyMs,
+        statusCode,
+        errorCode: null,
+        estimated: usage.estimated,
+        now: TimestampUtil.getCurrentUnixTimestampInSeconds(),
+      })
+      .catch(() => undefined);
   }
 
   private async fetchWithTimeout(call: UpstreamCall, timeoutMs: number): Promise<Response> {
@@ -291,34 +332,13 @@ class RouterService {
           }
 
           const success = response.result;
-          const recordSuccess = async (usage: { promptTokens: number; completionTokens: number; estimated: boolean }): Promise<void> => {
-            await keyDAO
-              .recordSuccess(candidate.id, usage.promptTokens, usage.completionTokens, TimestampUtil.getCurrentUnixTimestampInSeconds())
+          if ('usagePromise' in success) {
+            void success.usagePromise
+              .then((usage) => this.recordUsage(keyDAO, usageDAO, candidate, req, usage, latencyMs))
               .catch(() => undefined);
-            const refreshed = await keyDAO.getById(candidate.id).catch(() => null);
-            if (refreshed && this.isCapExceeded(refreshed)) {
-              await keyDAO.markExhausted(candidate.id, TimestampUtil.getCurrentUnixTimestampInSeconds()).catch(() => undefined);
-            }
-            await usageDAO
-              .insert({
-                id: UUIDUtil.getRandomUUID(),
-                userEmail: req.userEmail,
-                gatewayKeyId: req.gatewayKeyId,
-                providerId: req.providerId,
-                providerKeyId: candidate.id,
-                upstreamModel: req.upstreamModel,
-                promptTokens: usage.promptTokens,
-                completionTokens: usage.completionTokens,
-                latencyMs,
-                statusCode: 200,
-                errorCode: null,
-                estimated: usage.estimated,
-                now: TimestampUtil.getCurrentUnixTimestampInSeconds(),
-              })
-              .catch(() => undefined);
-          };
-          if ('usagePromise' in success) void success.usagePromise.then(recordSuccess).catch(() => undefined);
-          else await recordSuccess(success);
+          } else {
+            await this.recordUsage(keyDAO, usageDAO, candidate, req, success, latencyMs);
+          }
           return {
             status: 200,
             ...('bodyStream' in success ? { bodyStream: success.bodyStream } : { bodyText: success.bodyText }),
@@ -353,59 +373,51 @@ class RouterService {
             continue;
           }
         }
+        // Streaming clients get the upstream bytes relayed as they arrive.
+        // Buffering first made every streaming call pay for the whole response
+        // before the client saw a byte — the main CPU sink on long /responses
+        // generations.
+        if (upstream.status >= 200 && upstream.status < 300 && req.clientStream === true && upstream.body) {
+          const latencyMs = Date.now() - startedMs;
+          const tapped = tapUsageStream(upstream.body);
+          void tapped.usage
+            .then((usage) => this.recordUsage(keyDAO, usageDAO, candidate, req, usage, latencyMs, upstream.status))
+            .catch(() => undefined);
+          return {
+            status: upstream.status,
+            bodyStream: tapped.stream,
+            contentType: upstream.headers.get('content-type') ?? 'text/event-stream',
+            promptTokens: 0,
+            completionTokens: 0,
+            estimated: true,
+            providerKeyId: candidate.id,
+            attempts: i + 1,
+          };
+        }
         const bodyText = await upstream.text();
         const latencyMs = Date.now() - startedMs;
-        // The Codex backend only serves SSE: streaming clients get the relay
-        // verbatim, non-streaming clients get the completed response object
-        // re-assembled as JSON (raw SSE relay when assembly finds nothing).
+        // The Codex backend only serves SSE: non-streaming clients get the
+        // completed response object re-assembled as JSON (raw SSE relay when
+        // assembly finds nothing).
         let responseText = bodyText;
         let responseContentType: string | null = null;
         if (req.providerKind === 'OPENAI_CODEX') {
-          const clientStreaming = (req.upstreamBody as { stream?: unknown } | null)?.stream === true;
-          if (clientStreaming) {
+          const assembled = extractCodexCompletedResponse(bodyText);
+          if (assembled === null) {
             responseContentType = 'text/event-stream';
           } else {
-            const assembled = extractCodexCompletedResponse(bodyText);
-            if (assembled === null) {
-              responseContentType = 'text/event-stream';
-            } else {
-              responseText = assembled;
-              responseContentType = 'application/json';
-            }
+            responseText = assembled;
+            responseContentType = 'application/json';
           }
         }
         if (upstream.status >= 200 && upstream.status < 300) {
-          let usage = { promptTokens: 0, completionTokens: 0, estimated: true };
+          let usage: ParsedUsage = { promptTokens: 0, completionTokens: 0, estimated: true };
           try {
             usage = parseUsage(req.providerKind, JSON.parse(responseText));
           } catch {
             usage = { promptTokens: 0, completionTokens: 0, estimated: true };
           }
-          await keyDAO
-            .recordSuccess(candidate.id, usage.promptTokens, usage.completionTokens, TimestampUtil.getCurrentUnixTimestampInSeconds())
-            .catch(() => undefined);
-          // Exhaustion check after increment (best-effort status flip).
-          const refreshed = await keyDAO.getById(candidate.id).catch(() => null);
-          if (refreshed && this.isCapExceeded(refreshed)) {
-            await keyDAO.markExhausted(candidate.id, TimestampUtil.getCurrentUnixTimestampInSeconds()).catch(() => undefined);
-          }
-          await usageDAO
-            .insert({
-              id: UUIDUtil.getRandomUUID(),
-              userEmail: req.userEmail,
-              gatewayKeyId: req.gatewayKeyId,
-              providerId: req.providerId,
-              providerKeyId: candidate.id,
-              upstreamModel: req.upstreamModel,
-              promptTokens: usage.promptTokens,
-              completionTokens: usage.completionTokens,
-              latencyMs,
-              statusCode: upstream.status,
-              errorCode: null,
-              estimated: usage.estimated,
-              now: TimestampUtil.getCurrentUnixTimestampInSeconds(),
-            })
-            .catch(() => undefined);
+          await this.recordUsage(keyDAO, usageDAO, candidate, req, usage, latencyMs, upstream.status);
           return {
             status: upstream.status,
             bodyText: responseText,
