@@ -1,8 +1,8 @@
 /**
- * Single canonical language-tag implementation for backend + web.
- * Previously duplicated as `canonicalizeBackendLocaleTag` (shared) and
- * `canonicalizeTag` (web `i18n.ts`). Import from here in both layers.
- */
+Single canonical language-tag implementation for backend + web.
+Previously duplicated as `canonicalizeBackendLocaleTag` (shared) and
+`canonicalizeTag` (web `i18n.ts`). Import from here in both layers.
+*/
 function canonicalizeLanguageTag(tag: string): string {
   const normalized = tag.trim().replaceAll('_', '-');
   const parts = normalized.split('-').filter(Boolean);

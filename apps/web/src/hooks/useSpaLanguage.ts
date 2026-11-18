@@ -10,12 +10,12 @@ interface UseSpaLanguageInput {
 }
 
 /**
- * Language state slice extracted from `SpaApp` so the shell stays thin.
- * Owns detection precedence (backend `preferredLanguage` when present >
- * localStorage > navigator > en), `<html lang>` sync, and the manual-change
- * flow. Backend persistence is best-effort: the current API does not store
- * `preferredLanguage` yet, so failures fall back to local-only persistence.
- */
+Language state slice extracted from `SpaApp` so the shell stays thin.
+Owns detection precedence (backend `preferredLanguage` when present >
+localStorage > navigator > en), `<html lang>` sync, and the manual-change
+flow. Backend persistence is best-effort: the current API does not store
+`preferredLanguage` yet, so failures fall back to local-only persistence.
+*/
 function useSpaLanguage({ user, showNotice, setUser }: UseSpaLanguageInput) {
   const [language, setLanguage] = useState<string>(() => detectInitialLanguage());
   const [languageStatus, setLanguageStatus] = useState<'loading' | 'ready' | 'error'>('loading');

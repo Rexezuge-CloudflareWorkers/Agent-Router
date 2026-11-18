@@ -158,11 +158,11 @@ class RouterService {
   }
 
   /**
-   * Maps a non-retryable upstream body to a client-facing error. The Codex
-   * backend answers failed auth/edge checks with its login HTML page
-   * instead of JSON; surface the page copy plus whether an account was even
-   * linked, rather than markup.
-   */
+  Maps a non-retryable upstream body to a client-facing error. The Codex
+  backend answers failed auth/edge checks with its login HTML page
+  instead of JSON; surface the page copy plus whether an account was even
+  linked, rather than markup.
+  */
   private static toUpstreamError(
     kind: ProviderKind,
     status: number,

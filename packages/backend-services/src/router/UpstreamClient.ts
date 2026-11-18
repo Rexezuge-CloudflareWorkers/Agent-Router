@@ -54,12 +54,12 @@ function resolveCodexBase(baseUrl: string | null): string {
 }
 
 /**
- * Normalizes a Responses body for the Codex backend: `input` must be a list
- * of blocks (plain strings are wrapped as a single user message), `store`
- * must be false (the backend retains nothing for ChatGPT-backed calls), and
- * `stream` must be true (the backend only serves SSE). The gateway converts
- * back to JSON for non-streaming clients. Every other field passes through.
- */
+Normalizes a Responses body for the Codex backend: `input` must be a list
+of blocks (plain strings are wrapped as a single user message), `store`
+must be false (the backend retains nothing for ChatGPT-backed calls), and
+`stream` must be true (the backend only serves SSE). The gateway converts
+back to JSON for non-streaming clients. Every other field passes through.
+*/
 function normalizeCodexBody(body: unknown): unknown {
   const base = (typeof body === 'object' && body !== null && !Array.isArray(body) ? body : {}) as Record<string, unknown>;
   const record: Record<string, unknown> = { ...base, store: false, stream: true };
@@ -70,10 +70,10 @@ function normalizeCodexBody(body: unknown): unknown {
 }
 
 /**
- * Extracts human-readable text from an HTML error page (the Codex backend
- * answers failed auth/edge checks with its login page instead of JSON).
- * Script/style content is dropped so the result is page copy, not CSS.
- */
+Extracts human-readable text from an HTML error page (the Codex backend
+answers failed auth/edge checks with its login page instead of JSON).
+Script/style content is dropped so the result is page copy, not CSS.
+*/
 function extractHtmlPageText(html: string): string {
   return html
     .replaceAll(/<script[^<>]*>[\s\S]*?<\/script>/gi, ' ')
@@ -85,13 +85,13 @@ function extractHtmlPageText(html: string): string {
 }
 
 /**
- * Extracts the final response object from a Codex SSE stream (the
- * `response.completed` event payload) so non-streaming clients receive plain
- * JSON. The backend sometimes snapshots `output` empty, so output is rebuilt
- * from `response.output_item.done` events (falling back to accumulated text
- * deltas) when the snapshot carries none. Returns null when no completed
- * event is present.
- */
+Extracts the final response object from a Codex SSE stream (the
+`response.completed` event payload) so non-streaming clients receive plain
+JSON. The backend sometimes snapshots `output` empty, so output is rebuilt
+from `response.output_item.done` events (falling back to accumulated text
+deltas) when the snapshot carries none. Returns null when no completed
+event is present.
+*/
 function extractCodexCompletedResponse(sseText: string): string | null {
   let completed: Record<string, unknown> | null = null;
   const items: unknown[] = [];

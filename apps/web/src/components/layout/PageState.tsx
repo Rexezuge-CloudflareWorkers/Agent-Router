@@ -1,7 +1,7 @@
 /**
- * Shared loading / empty states so every view renders the same spinner and
- * the same centered empty message at the same geometry.
- */
+Shared loading / empty states so every view renders the same spinner and
+the same centered empty message at the same geometry.
+*/
 export function LoadingSpinner({ label = 'Loading' }: { label?: string }) {
   return (
     <div className="min-h-64 flex items-center justify-center" role="status" aria-label={label}>

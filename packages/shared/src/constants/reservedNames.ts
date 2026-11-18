@@ -1,15 +1,15 @@
 /**
- * System names reserved from the shared user ↔ org namespace.
- *
- * A single-segment name in this set must never be claimed as a username or
- * organization name: it would shadow worker API roots (`/health`, `/docs`,
- * `/repos`, `/users`, `/user`, `/api`), SPA roots (`/`, `/new`, `/settings`,
- * `/search`, `/notifications`, `/:username`), or obvious future auth/product
- * roots (`login`, `admin`, `orgs`, ...). Comparison is case-insensitive.
- *
- * Grandfathering: reads keep serving pre-existing rows; only creates,
- * renames, auto-bootstrap, and repo-owner validation reject these names.
- */
+System names reserved from the shared user ↔ org namespace.
+
+A single-segment name in this set must never be claimed as a username or
+organization name: it would shadow worker API roots (`/health`, `/docs`,
+`/repos`, `/users`, `/user`, `/api`), SPA roots (`/`, `/new`, `/settings`,
+`/search`, `/notifications`, `/:username`), or obvious future auth/product
+roots (`login`, `admin`, `orgs`, ...). Comparison is case-insensitive.
+
+Grandfathering: reads keep serving pre-existing rows; only creates,
+renames, auto-bootstrap, and repo-owner validation reject these names.
+*/
 const RESERVED_NAMESPACE_NAMES_LIST: readonly string[] = [
   // Worker / API roots (AgentRouterWorker + public read-model).
   'health',

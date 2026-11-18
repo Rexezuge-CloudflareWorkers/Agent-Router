@@ -50,11 +50,11 @@ function responseToolOutput(output: unknown): { text: string; images: Array<Reco
 }
 
 /**
- * Responses API request → OpenAI Chat Completions request. Mirrors the
- * stateless conversion used by commandcode-proxy: reasoning / message /
- * function_call items are regrouped under one assistant message, and images
- * returned by parallel tool calls are collected after all tool results.
- */
+Responses API request → OpenAI Chat Completions request. Mirrors the
+stateless conversion used by commandcode-proxy: reasoning / message /
+function_call items are regrouped under one assistant message, and images
+returned by parallel tool calls are collected after all tool results.
+*/
 function convertResponsesToChat(responsesRequest: unknown): Record<string, unknown> {
   const request = asRecord(responsesRequest);
   const messages: Array<Record<string, unknown>> = [];
@@ -181,8 +181,8 @@ function anthropicToolChoice(choice: unknown): unknown {
 }
 
 /**
- * Anthropic Messages request → OpenAI Chat Completions request.
- */
+Anthropic Messages request → OpenAI Chat Completions request.
+*/
 function convertAnthropicToChat(anthropicRequest: unknown): Record<string, unknown> {
   const request = asRecord(anthropicRequest);
   const system = request.system;

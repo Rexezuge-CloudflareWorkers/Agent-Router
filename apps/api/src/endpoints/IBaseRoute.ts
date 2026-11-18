@@ -5,15 +5,15 @@ import { getBackendStrings } from '@agent-router/shared/i18n';
 type HonoContext = Context<{ Bindings: Env; Variables: { AuthenticatedUserEmailAddress: string } }>;
 
 /**
- * Template Method base for Hono route handlers (Otter `IBaseRoute` pattern).
- * Subclasses implement `handleRequest`; the base owns error mapping so
- * handlers stop duplicating `catch(()=>null)` / status-code switches and
- * private-repo existence hiding stays consistent.
- *
- * Backend `Message` stays English (translate display-side per Otter i18n
- * guidance); `getBackendStrings` is wired here so the shared backend locale
- * bundle is live code, not dead code.
- */
+Template Method base for Hono route handlers (Otter `IBaseRoute` pattern).
+Subclasses implement `handleRequest`; the base owns error mapping so
+handlers stop duplicating `catch(()=>null)` / status-code switches and
+private-repo existence hiding stays consistent.
+
+Backend `Message` stays English (translate display-side per Otter i18n
+guidance); `getBackendStrings` is wired here so the shared backend locale
+bundle is live code, not dead code.
+*/
 abstract class BaseRoute {
   protected abstract handleRequest(c: HonoContext): Promise<Response>;
 

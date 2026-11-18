@@ -38,14 +38,14 @@ import { RouterLimits } from './sections/RouterLimits';
 import { WebhookLimits } from './sections/WebhookLimits';
 
 /**
- * Injectable instance view over Agent-Router environment configuration.
- *
- * Composed of focused section objects (`RepoLimits`, `GitLimits`,
- * `WebhookLimits`, `RealtimeLimits`, `AuthConfig`) so the god-file stays a
- * thin facade. `ConfigurationManager` statics delegate here for backward
- * compatibility. New code should accept `AppConfiguration` via constructor
- * injection so env parsing is stubbable.
- */
+Injectable instance view over Agent-Router environment configuration.
+
+Composed of focused section objects (`RepoLimits`, `GitLimits`,
+`WebhookLimits`, `RealtimeLimits`, `AuthConfig`) so the god-file stays a
+thin facade. `ConfigurationManager` statics delegate here for backward
+compatibility. New code should accept `AppConfiguration` via constructor
+injection so env parsing is stubbable.
+*/
 class AppConfiguration {
   private readonly repos: RepoLimits;
   private readonly git: GitLimits;

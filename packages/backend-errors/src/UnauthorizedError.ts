@@ -1,8 +1,8 @@
 import { ErrorCode, ServiceError } from './IServiceError';
 
 class UnauthorizedError extends ServiceError {
-  constructor(message?: string) {
-    super(message ?? 'Authentication is required and has failed or has not yet been provided.');
+  constructor(message: string = 'Authentication is required and has failed or has not yet been provided.') {
+    super(message);
   }
 
   public getErrorCode(): ErrorCode {

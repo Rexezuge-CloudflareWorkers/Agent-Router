@@ -1,8 +1,8 @@
 import { ErrorCode, ServiceError } from './IServiceError';
 
 class NotFoundError extends ServiceError {
-  constructor(message?: string) {
-    super(message ?? 'The requested resource was not found.');
+  constructor(message: string = 'The requested resource was not found.') {
+    super(message);
   }
 
   public getErrorCode(): ErrorCode {

@@ -8,7 +8,7 @@ interface CommandCodeTranslator {
   finalize(): string[];
   finalJson(): Record<string, unknown>;
   /** Set when `finalize` should not be written to the client because the upstream
-   * stream failed before any output. */
+  stream failed before any output. */
   failure(): CommandCodeMappedError | { status: number; type: string; message: string } | null;
 }
 

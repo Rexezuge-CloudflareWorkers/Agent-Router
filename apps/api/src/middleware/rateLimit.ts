@@ -52,11 +52,11 @@ function cleanup(now: number): void {
 }
 
 /**
- * Minimal in-memory token-bucket guard for abuse-prone mutating endpoints.
- * Per-isolate only (Workers have no shared memory); the cron sweeper and DO
- * single-flight remain the cross-isolate backstop. Never throws — failures
- * fail open so limiting can never 500 a legitimate request.
- */
+Minimal in-memory token-bucket guard for abuse-prone mutating endpoints.
+Per-isolate only (Workers have no shared memory); the cron sweeper and DO
+single-flight remain the cross-isolate backstop. Never throws — failures
+fail open so limiting can never 500 a legitimate request.
+*/
 function rateLimit(opts: {
   windowMs: number;
   max: number;

@@ -1,8 +1,8 @@
 import { ErrorCode, ServiceError } from './IServiceError';
 
 class BadRequestError extends ServiceError {
-  constructor(message?: string) {
-    super(message ?? 'The request could not be understood or was missing required parameters.');
+  constructor(message: string = 'The request could not be understood or was missing required parameters.') {
+    super(message);
   }
 
   public getErrorCode(): ErrorCode {

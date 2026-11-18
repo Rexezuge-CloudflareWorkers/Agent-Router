@@ -39,12 +39,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Extracts a refresh token from pasted credentials.
- *
- * Accepts a bare token string or a JSON blob in any of the shapes written by
- * the Codex app (`~/.codex/auth.json`: `{tokens: {refresh_token}}`) and
- * OpenCode's Codex plugin (`{refresh}` / `{refresh_token}`).
- */
+Extracts a refresh token from pasted credentials.
+
+Accepts a bare token string or a JSON blob in any of the shapes written by
+the Codex app (`~/.codex/auth.json`: `{tokens: {refresh_token}}`) and
+OpenCode's Codex plugin (`{refresh}` / `{refresh_token}`).
+*/
 function extractRefreshToken(input: { refreshToken?: unknown; authJson?: unknown }): string | null {
   const fromValue = (value: unknown): string | null => {
     if (typeof value === 'string') {
@@ -74,15 +74,15 @@ function extractRefreshToken(input: { refreshToken?: unknown; authJson?: unknown
 }
 
 /**
- * Extracts a ChatGPT account id from pasted credentials when present.
- *
- * Same nested shapes as extractRefreshToken (`tokens`/`credentials`/`auth`
- * wrappers, `account_id`/`chatgpt_account_id` keys). Used as a backfill when
- * the refreshed token's JWT carries no account claims — without an account
- * id the gateway omits `ChatGPT-Account-Id` and the Codex backend answers
- * with its login page instead of reaching the model. Bare token strings are
- * never treated as account ids.
- */
+Extracts a ChatGPT account id from pasted credentials when present.
+
+Same nested shapes as extractRefreshToken (`tokens`/`credentials`/`auth`
+wrappers, `account_id`/`chatgpt_account_id` keys). Used as a backfill when
+the refreshed token's JWT carries no account claims — without an account
+id the gateway omits `ChatGPT-Account-Id` and the Codex backend answers
+with its login page instead of reaching the model. Bare token strings are
+never treated as account ids.
+*/
 function toAccountObject(value: unknown): Record<string, unknown> | null {
   if (typeof value !== 'string') return isRecord(value) ? value : null;
   const trimmed = value.trim();
@@ -182,11 +182,11 @@ class CodexOAuthService {
   }
 
   /**
-   * Starts a device-code authorization for a Codex key.
-   *
-   * Returns the short code the user enters at the verification URL.
-   * The browser never touches this flow, so no redirect_uri is involved.
-   */
+  Starts a device-code authorization for a Codex key.
+  
+  Returns the short code the user enters at the verification URL.
+  The browser never touches this flow, so no redirect_uri is involved.
+  */
   public async startDeviceAuthorization(providerId: string, keyId: string, userEmail: string): Promise<CodexDeviceStart> {
     const normalized = userEmail.toLowerCase();
     await this.requireCodexKey(providerId, keyId, normalized);
@@ -214,11 +214,11 @@ class CodexOAuthService {
   }
 
   /**
-   * Performs a single device-authorization poll.
-   *
-   * Transient upstream failures stay `pending` so the frontend keeps polling;
-   * only approval, expiry, or a terminal error ends the flow.
-   */
+  Performs a single device-authorization poll.
+  
+  Transient upstream failures stay `pending` so the frontend keeps polling;
+  only approval, expiry, or a terminal error ends the flow.
+  */
   public async pollDeviceAuthorization(providerId: string, keyId: string, userEmail: string): Promise<CodexDeviceStatus> {
     const normalized = userEmail.toLowerCase();
     const { keyDAO } = await this.requireCodexKey(providerId, keyId, normalized);
@@ -265,11 +265,11 @@ class CodexOAuthService {
   }
 
   /**
-   * Imports a refresh token pasted from the Codex app or OpenCode.
-   *
-   * The token is validated with an immediate refresh (which also yields the
-   * account id), then stored encrypted like a device-flow connection.
-   */
+  Imports a refresh token pasted from the Codex app or OpenCode.
+  
+  The token is validated with an immediate refresh (which also yields the
+  account id), then stored encrypted like a device-flow connection.
+  */
   public async importRefreshToken(
     providerId: string,
     keyId: string,

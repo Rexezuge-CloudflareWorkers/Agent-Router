@@ -2,11 +2,11 @@ import { Link } from 'react-router-dom';
 import { GitBranch } from 'lucide-react';
 
 /**
- * Contextual top bar for every non-root page. The global `Header` renders on
- * `/` only; all other routes render this bar instead, with identical
- * geometry (sticky, `max-w-7xl mx-auto px-6`), so the logo/home anchor never
- * moves between pages. `RepoHeader` reuses it for its title row.
- */
+Contextual top bar for every non-root page. The global `Header` renders on
+`/` only; all other routes render this bar instead, with identical
+geometry (sticky, `max-w-7xl mx-auto px-6`), so the logo/home anchor never
+moves between pages. `RepoHeader` reuses it for its title row.
+*/
 export function ContextBar({ crumb, actions, bare = false }: { crumb: React.ReactNode; actions?: React.ReactNode; bare?: boolean }) {
   const row = (
     <div className="max-w-7xl mx-auto px-6 py-3 flex items-center gap-3 flex-wrap">

@@ -1,8 +1,8 @@
 import { ErrorCode, ServiceError } from './IServiceError';
 
 class ForbiddenError extends ServiceError {
-  constructor(message?: string) {
-    super(message ?? 'You do not have permission to perform this action.');
+  constructor(message: string = 'You do not have permission to perform this action.') {
+    super(message);
   }
 
   public getErrorCode(): ErrorCode {
