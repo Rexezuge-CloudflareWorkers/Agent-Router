@@ -1,10 +1,10 @@
 import { AppConfiguration } from './AppConfiguration';
 
 /**
- * Thin backward-compatible facade over `AppConfiguration`.
- * New code should inject `AppConfiguration` directly; statics remain so
- * existing call sites keep working while they migrate.
- */
+Thin backward-compatible facade over `AppConfiguration`.
+New code should inject `AppConfiguration` directly; statics remain so
+existing call sites keep working while they migrate.
+*/
 class ConfigurationManager {
   public static readonly auth = {
     isDemoMode: (env: unknown): boolean => AppConfiguration.fromEnv(env).isDemoMode(),

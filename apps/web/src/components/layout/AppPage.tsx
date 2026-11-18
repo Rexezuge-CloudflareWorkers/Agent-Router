@@ -3,11 +3,11 @@ import { cn } from '../../lib/utils';
 type AppPageVariant = 'wide' | 'narrow' | 'hero';
 
 /**
- * Single standardized page container. `wide` is the default for every view;
- * `narrow` is reserved for centered forms (New Repository); `hero` is
- * reserved for the landing hero. Keeps left-edge alignment identical
- * across page changes.
- */
+Single standardized page container. `wide` is the default for every view;
+`narrow` is reserved for centered forms (New Repository); `hero` is
+reserved for the landing hero. Keeps left-edge alignment identical
+across page changes.
+*/
 export function AppPage({
   variant = 'wide',
   className,

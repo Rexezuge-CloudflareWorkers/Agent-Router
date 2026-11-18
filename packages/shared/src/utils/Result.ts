@@ -1,7 +1,7 @@
 /**
- * Minimal Result type for explicit error handling without exceptions.
- * Ported from Otter's `shared/src/utils/Result.ts` pattern.
- */
+Minimal Result type for explicit error handling without exceptions.
+Ported from Otter's `shared/src/utils/Result.ts` pattern.
+*/
 type Ok<T> = { readonly ok: true; readonly value: T };
 type Err<E> = { readonly ok: false; readonly error: E };
 type Result<T, E = Error> = Ok<T> | Err<E>;

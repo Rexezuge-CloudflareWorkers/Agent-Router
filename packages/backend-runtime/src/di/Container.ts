@@ -6,13 +6,13 @@ type Factory<T> = (container: Container) => T;
 type Token<T = unknown> = (string | symbol) & { readonly __type?: T };
 
 /**
- * Minimal dependency-injection container (Factory + Singleton scopes).
- *
- * Composition roots (`createRequestScope`, `RepoWorkerFactory`, tests) wire
- * concrete implementations once; handlers resolve via `scope.get(Tokens.X)`.
- * Prefer constructor injection of `I*` ports at registration time over
- * inline `scope.get()` in business logic.
- */
+Minimal dependency-injection container (Factory + Singleton scopes).
+
+Composition roots (`createRequestScope`, `RepoWorkerFactory`, tests) wire
+concrete implementations once; handlers resolve via `scope.get(Tokens.X)`.
+Prefer constructor injection of `I*` ports at registration time over
+inline `scope.get()` in business logic.
+*/
 class Container {
   private readonly factories = new Map<Token<unknown>, Factory<unknown>>();
   private readonly singletons = new Map<Token<unknown>, unknown>();

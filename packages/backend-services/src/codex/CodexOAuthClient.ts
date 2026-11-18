@@ -269,11 +269,10 @@ async function pollDeviceCode(
     if (response.status >= 400 && response.status < 500) throw new OAuth2TokenNonRetryableError(message);
     throw new OAuth2TokenRetryableError(message);
   }
-  if (!data.authorization_code || !data.code_verifier) {
-    // A 200 without a code means approval is still in flight. Keep waiting.
-    return { status: 'pending' };
-  }
-  return { status: 'authorized', authorizationCode: data.authorization_code, codeVerifier: data.code_verifier };
+  // A 200 without a code means approval is still in flight. Keep waiting.
+  return data.authorization_code && data.code_verifier
+    ? { status: 'authorized', authorizationCode: data.authorization_code, codeVerifier: data.code_verifier }
+    : { status: 'pending' };
 }
 
 export { CodexOAuthClient };

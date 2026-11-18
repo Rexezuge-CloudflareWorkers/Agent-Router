@@ -27,10 +27,10 @@ function isSensitiveJsonPath(pathname: string): boolean {
 }
 
 /**
- * Baseline security headers for API JSON responses and the SPA shell.
- * The SPA needs inline scripts/styles, so CSP stays permissive-but-bounded
- * (`frame-ancestors 'none'` blocks clickjacking without breaking Vite).
- */
+Baseline security headers for API JSON responses and the SPA shell.
+The SPA needs inline scripts/styles, so CSP stays permissive-but-bounded
+(`frame-ancestors 'none'` blocks clickjacking without breaking Vite).
+*/
 function applySecurityHeaders(c: HeaderContext): void {
   for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
     c.header(key, value);

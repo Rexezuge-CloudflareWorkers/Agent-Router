@@ -1,9 +1,9 @@
 /**
- * Canonical email value object.
- * Consolidates 100+ scattered `email.toLowerCase()` call sites into a single
- * normalization point. Layer 0 stays dependency-free: validation failures
- * throw plain `Error`; callers in layers 2-3 map to `BadRequestError`.
- */
+Canonical email value object.
+Consolidates 100+ scattered `email.toLowerCase()` call sites into a single
+normalization point. Layer 0 stays dependency-free: validation failures
+throw plain `Error`; callers in layers 2-3 map to `BadRequestError`.
+*/
 class EmailAddress {
   private constructor(private readonly canonical: string) {}
 
@@ -47,10 +47,10 @@ class EmailAddress {
 }
 
 /**
- * Canonical `owner/name` repository identifier.
- * Consolidates `normalizeOwner/normalizeRepo(strip .git)` + `OWNER_RE/REPO_RE`
- * validation spread across `RepoService` and route handlers.
- */
+Canonical `owner/name` repository identifier.
+Consolidates `normalizeOwner/normalizeRepo(strip .git)` + `OWNER_RE/REPO_RE`
+validation spread across `RepoService` and route handlers.
+*/
 const OWNER_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$/i;
 const REPO_PATTERN = /^[\w.-]{1,100}$/i;
 
@@ -72,17 +72,16 @@ class RepoFullName {
   public static parse(owner: string, name: string): RepoFullName {
     const normalizedOwner = this.normalizeOwner(owner);
     const normalizedName = this.normalizeRepo(name);
-    if (!OWNER_PATTERN.test(normalizedOwner) || !REPO_PATTERN.test(normalizedName)) {
-      throw new Error('Invalid owner or repository name');
-    }
     if (
-      normalizedName === '.' ||
-      normalizedName === '..' ||
-      normalizedName.startsWith('.') ||
-      normalizedName.startsWith('-') ||
-      normalizedName.endsWith('.lock') ||
-      normalizedName.includes('..') ||
-      normalizedName.includes('//')
+      normalizedName === '.'
+      || normalizedName === '..'
+      || normalizedName.startsWith('.')
+      || normalizedName.startsWith('-')
+      || normalizedName.endsWith('.lock')
+      || normalizedName.includes('..')
+      || normalizedName.includes('//')
+      || !OWNER_PATTERN.test(normalizedOwner)
+      || !REPO_PATTERN.test(normalizedName)
     ) {
       throw new Error('Invalid owner or repository name');
     }

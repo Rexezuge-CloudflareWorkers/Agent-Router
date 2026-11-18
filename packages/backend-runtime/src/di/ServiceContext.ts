@@ -1,9 +1,9 @@
 import type { ServiceEnv } from '../config/ServiceEnv';
 
 /**
- * Minimal logger / clock contracts for Agent-Router services.
- * Kept in backend-runtime (Layer 1) so shared (Layer 0) stays dependency-free.
- */
+Minimal logger / clock contracts for Agent-Router services.
+Kept in backend-runtime (Layer 1) so shared (Layer 0) stays dependency-free.
+*/
 interface ILogger {
   debug(...args: unknown[]): void;
   info(...args: unknown[]): void;
@@ -55,8 +55,8 @@ class FixedClock implements IClock {
 }
 
 /**
- * Single request-scoped context for Agent-Router domain services.
- */
+Single request-scoped context for Agent-Router domain services.
+*/
 interface ServiceContext {
   readonly env: ServiceEnv;
   readonly logger: ILogger;

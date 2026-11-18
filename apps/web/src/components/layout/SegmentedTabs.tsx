@@ -7,10 +7,10 @@ export interface SegmentTab {
 }
 
 /**
- * The single tab pattern for the whole SPA (pill segmented control, taken
- * from the Header/Profile style). Replaces the Repo underline tabs and the
- * Search dot-separated buttons so similar elements sit in the same place.
- */
+The single tab pattern for the whole SPA (pill segmented control, taken
+from the Header/Profile style). Replaces the Repo underline tabs and the
+Search dot-separated buttons so similar elements sit in the same place.
+*/
 export function SegmentedTabs({
   tabs,
   value,

@@ -210,9 +210,7 @@ async function commandCodeModels(
 ): Promise<{ id: string; name: string; providerId: string }[]> {
   const scope = createRequestScope(env);
   const providers = await scope.get(Tokens.ProviderService).listProviders(userEmail);
-  const provider = explicitId
-    ? providers.find((p) => p.id === explicitId && p.kind === 'COMMAND_CODE')
-    : providers.find((p) => p.status === 'active' && p.kind === 'COMMAND_CODE');
+  const provider = providers.find(explicitId ? (p) => p.id === explicitId && p.kind === 'COMMAND_CODE' : (p) => p.status === 'active' && p.kind === 'COMMAND_CODE');
   if (!provider) return [];
   const keyService = scope.get(Tokens.ProviderKeyService);
   const keys = await keyService.listKeys(provider.id, userEmail).catch(() => []);

@@ -1,10 +1,10 @@
 import { Card } from '../ui/Card';
 
 /**
- * Standard page-title header used by Dashboard / Settings / Profile /
- * Notifications / Snippets: icon avatar + title + description on the left,
- * actions right-aligned. Replaces the four ad-hoc title-Card variants.
- */
+Standard page-title header used by Dashboard / Settings / Profile /
+Notifications / Snippets: icon avatar + title + description on the left,
+actions right-aligned. Replaces the four ad-hoc title-Card variants.
+*/
 export function PageHeaderCard({
   icon,
   title,

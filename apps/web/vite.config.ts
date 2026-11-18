@@ -2,7 +2,6 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'node:path';
-import type { IncomingMessage } from 'node:http';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 
 const apiGeneratedDir = path.resolve(__dirname, '../../apps/api/src/generated');
@@ -13,13 +12,10 @@ const apiTarget = 'http://localhost:8787';
 // Management + proxy API prefixes live under `/user`, `/v1`, `/anthropic`,
 // `/gemini`. No SPA route shares those prefixes, so every match proxies to
 // the worker without an `Accept` bypass.
-function apiProxy({ spaFallback = false }: { spaFallback?: boolean } = {}) {
+function apiProxy() {
   return {
     target: apiTarget,
     changeOrigin: true,
-    ...(spaFallback && {
-      bypass: (req: IncomingMessage) => (req.headers.accept?.includes('text/html') ? '/index.html' : undefined),
-    }),
   };
 }
 

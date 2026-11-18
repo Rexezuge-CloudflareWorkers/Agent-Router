@@ -67,8 +67,7 @@ const MAX_AUDIT_FILTER_LENGTH = 200;
 const MAX_AUDIT_LIMIT = 100;
 
 function clampAuditLimit(raw: number | undefined): number | undefined {
-  if (raw === undefined) return undefined;
-  if (!Number.isSafeInteger(raw)) return undefined;
+  if ((raw === undefined) || !Number.isSafeInteger(raw)) return undefined;
   return raw < 1 ? undefined : Math.min(raw, MAX_AUDIT_LIMIT);
 }
 

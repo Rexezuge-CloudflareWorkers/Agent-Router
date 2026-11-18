@@ -103,7 +103,7 @@ function compareBytes(a: Uint8Array, b: Uint8Array): number {
 }
 
 async function fingerprintHash(value: string): Promise<string> {
-  const trimmed = (value ?? '').trim();
+  const trimmed = value.trim();
   return trimmed ? toHex(await sha256Bytes(`${FP_SALT}\0${trimmed.toLowerCase()}`)) : '';
 }
 

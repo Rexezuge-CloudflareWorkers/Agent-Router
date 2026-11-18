@@ -3,8 +3,8 @@ import { ServiceError } from './IServiceError';
 class ExceededLimitError extends ServiceError {
   public override readonly retryable = true;
 
-  constructor(message?: string) {
-    super(message ?? 'Rate limit exceeded. Try again later.');
+  constructor(message: string = 'Rate limit exceeded. Try again later.') {
+    super(message);
   }
 
   public getErrorCode(): number {
