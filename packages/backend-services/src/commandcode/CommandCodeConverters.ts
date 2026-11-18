@@ -207,7 +207,11 @@ function convertAnthropicToChat(anthropicRequest: unknown): Record<string, unkno
     const message = asRecord(rawMessage);
     const role = asString(message.role);
     const content = message.content;
-    if (role === 'assistant') {
+    if (typeof content === 'string') {
+      // Anthropic clients commonly send a plain string for user/assistant content.
+      if (role === 'assistant') messages.push({ role: 'assistant', content });
+      else if (role === 'user') messages.push({ role: 'user', content });
+    } else if (role === 'assistant') {
       let text = '';
       let reasoning = '';
       const toolCalls: Array<Record<string, unknown>> = [];
