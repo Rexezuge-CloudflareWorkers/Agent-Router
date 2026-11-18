@@ -41,7 +41,7 @@ async function userAuthenticationHandler(c: RequestContext, next: Next): Promise
 function parseBearerToken(header: string): string | null {
   const trimmed = header.trim();
   const space = trimmed.indexOf(' ');
-  if ((space === -1) || (trimmed.slice(0, space).toLowerCase() !== 'bearer')) return null;
+  if (space === -1 || trimmed.slice(0, space).toLowerCase() !== 'bearer') return null;
   const token = trimmed.slice(space + 1).trim();
   return token || null;
 }
@@ -97,7 +97,8 @@ class MiddlewareHandlers {
     } catch {
       // fall through to header auth
     }
-    const token = parseBearerToken(c.req.header('authorization') ?? '');
+    // Anthropic clients send the key as `x-api-key`; accept it as a fallback.
+    const token = parseBearerToken(c.req.header('authorization') ?? '') ?? ((c.req.header('x-api-key') ?? '').trim() || null);
     if (!token) return c.json({ error: 'Missing gateway key' }, 401);
     try {
       return await getScope(c).get(Tokens.GatewayKeyService).authenticate(token);

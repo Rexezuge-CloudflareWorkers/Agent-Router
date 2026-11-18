@@ -16,6 +16,8 @@
     "./provider/*": "./src/provider/*.ts",
     "./codex": "./src/codex/index.ts",
     "./codex/*": "./src/codex/*.ts",
+    "./commandcode": "./src/commandcode/index.ts",
+    "./commandcode/*": "./src/commandcode/*.ts",
     "./router": "./src/router/index.ts",
     "./router/*": "./src/router/*.ts",
     "./usage": "./src/usage/index.ts",

@@ -3,6 +3,7 @@ export * from './ConfigurationManager';
 export { AppConfiguration } from './AppConfiguration';
 export { EnvParser } from './EnvParser';
 export { AuthConfig } from './sections/AuthConfig';
+export { CommandCodeLimits } from './sections/CommandCodeLimits';
 export { GitLimits } from './sections/GitLimits';
 export { RealtimeLimits } from './sections/RealtimeLimits';
 export { RepoLimits } from './sections/RepoLimits';

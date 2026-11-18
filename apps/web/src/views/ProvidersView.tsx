@@ -248,6 +248,7 @@ export function ProvidersView({ showNotice }: { showNotice: (type: 'success' | '
             <option value="GEMINI">Gemini</option>
             <option value="OPENAI_COMPAT">OpenAI Compatible</option>
             <option value="OPENAI_CODEX">{t('providers.codexKindOption', 'OpenAI Codex (OAuth)')}</option>
+            <option value="COMMAND_CODE">{t('providers.commandCodeKindOption', 'Command Code')}</option>
           </select>
           <Input
             value={name}

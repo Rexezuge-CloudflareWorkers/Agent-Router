@@ -4,7 +4,7 @@ export interface CurrentUser {
   preferredLanguage?: string | null;
 }
 
-export type ProviderKind = 'OPENAI' | 'ANTHROPIC' | 'GEMINI' | 'OPENAI_COMPAT' | 'OPENAI_CODEX';
+export type ProviderKind = 'OPENAI' | 'ANTHROPIC' | 'GEMINI' | 'OPENAI_COMPAT' | 'OPENAI_CODEX' | 'COMMAND_CODE';
 
 export type ProviderKeyAuthType = 'static' | 'codex_oauth';
 

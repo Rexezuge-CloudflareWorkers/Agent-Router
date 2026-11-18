@@ -47,6 +47,7 @@
     "noProviders": "No Providers Yet. Create One To Get Started.",
     "addKey": "Add Key",
     "codexKindOption": "OpenAI Codex (OAuth)",
+    "commandCodeKindOption": "Command Code",
     "addCodexKey": "Add Codex Key",
     "connectWithChatGPT": "Connect With ChatGPT",
     "reconnectCodex": "Reconnect",

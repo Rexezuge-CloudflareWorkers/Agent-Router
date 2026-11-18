@@ -11,6 +11,18 @@ function inferKind(model: unknown): ProviderKind | null {
   const m = model.toLowerCase();
   if (m.startsWith('claude-')) return 'ANTHROPIC';
   if (m.startsWith('gemini-') || m.startsWith('models/gemini-')) return 'GEMINI';
+  if (
+    m.startsWith('deepseek/') ||
+    m.startsWith('moonshotai/') ||
+    m.startsWith('zai-org/') ||
+    m.startsWith('minimaxai/') ||
+    m.startsWith('qwen/') ||
+    m.startsWith('stepfun/') ||
+    m.startsWith('xiaomi/') ||
+    m.startsWith('google/gemini-')
+  ) {
+    return 'COMMAND_CODE';
+  }
   return m.startsWith('gpt-') ||
     m.startsWith('o1-') ||
     m.startsWith('o3-') ||
@@ -18,7 +30,9 @@ function inferKind(model: unknown): ProviderKind | null {
     m.startsWith('text-embedding-') ||
     m.startsWith('whisper-') ||
     m.startsWith('dall-e-') ||
-    m.startsWith('tts-') ? 'OPENAI' : null;
+    m.startsWith('tts-')
+    ? 'OPENAI'
+    : null;
 }
 
 async function resolveProviderId(
@@ -44,6 +58,14 @@ async function resolveProviderId(
     if (opts.kind === 'OPENAI') {
       const codex = providers.find((p) => p.kind === 'OPENAI_CODEX');
       if (codex) return { id: codex.id, kind: codex.kind, baseUrl: codex.baseUrl };
+    }
+    // Anthropic-shaped traffic can be served by Command Code (it speaks the
+    // Messages API), so fall back when no Anthropic provider is configured.
+    // Unknown model prefixes are also common for Command Code's namespaced
+    // models, so use the only active Command Code provider instead of failing.
+    if (opts.kind === 'OPENAI' || opts.kind === 'ANTHROPIC') {
+      const commandCode = providers.find((p) => p.kind === 'COMMAND_CODE');
+      if (commandCode) return { id: commandCode.id, kind: commandCode.kind, baseUrl: commandCode.baseUrl };
     }
     throw new NotFoundError(`No active ${opts.kind} provider. Add one under /user/providers.`);
   }
@@ -74,13 +96,44 @@ function errorResponse(error: unknown): Response {
   return Response.json({ error: { message: status === 500 ? 'Internal error' : message, type: 'internal_error' } }, { status });
 }
 
-type ProxyContext = { req: { json(): Promise<unknown>; header(name: string): string | undefined }; env: Env };
+type ProxyContext = {
+  req: {
+    json(): Promise<unknown>;
+    header(name: string): string | undefined;
+    raw: { headers: Headers; signal?: AbortSignal };
+  };
+  env: Env;
+};
+
+function incomingHeaders(c: ProxyContext): Record<string, string | undefined> {
+  return {
+    'x-session-id': c.req.header('x-session-id'),
+    'x-claude-code-session-id': c.req.header('x-claude-code-session-id'),
+    session_id: c.req.header('session_id'),
+    'x-cmd-zdr': c.req.header('x-cmd-zdr'),
+    'x-api-key': c.req.header('x-api-key'),
+  };
+}
+
+function proxyResponse(result: {
+  status: number;
+  bodyText?: string;
+  bodyStream?: ReadableStream<Uint8Array>;
+  contentType: string | null;
+  providerKeyId: string;
+}): Response {
+  const headers: Record<string, string> = {
+    'content-type': result.contentType ?? 'application/json',
+    'x-provider-key-id': result.providerKeyId,
+  };
+  return new Response(result.bodyStream ?? result.bodyText ?? '', { status: result.status, headers });
+}
 
 async function proxyOpenAI(c: ProxyContext, upstreamPath: string): Promise<Response> {
   const gateway = await MiddlewareHandlers.requireGateway(c as never);
   if (gateway instanceof Response) return gateway;
   const rawBody = await c.req.json().catch(() => null);
-  const body = rawBody as { model?: unknown } | null;
+  const body = rawBody as { model?: unknown; stream?: unknown } | null;
   if (!body || typeof body !== 'object')
     return Response.json({ error: { message: 'Invalid JSON body', type: 'invalid_request_error' } }, { status: 400 });
   const explicitId = c.req.header('x-provider-id')?.trim() || null;
@@ -109,14 +162,23 @@ async function proxyOpenAI(c: ProxyContext, upstreamPath: string): Promise<Respo
     return Response.json(
       {
         error: {
-          message: 'Codex OAuth providers only support POST /v1/responses with a Codex model; add an OPENAI provider for chat completions or embeddings',
+          message:
+            'Codex OAuth providers only support POST /v1/responses with a Codex model; add an OPENAI provider for chat completions or embeddings',
           type: 'invalid_request_error',
         },
       },
       { status: 400 },
     );
   }
+  // Command Code only serves chat/responses traffic, not embeddings.
+  if (upstreamPath === '/embeddings' && provider.kind === 'COMMAND_CODE') {
+    return Response.json(
+      { error: { message: 'Command Code providers do not support embeddings', type: 'invalid_request_error' } },
+      { status: 400 },
+    );
+  }
   const bodyText = JSON.stringify(body);
+  const clientEndpoint = upstreamPath === '/responses' ? 'responses' : 'chat';
   try {
     const scope = createRequestScope(c.env);
     const router = scope.get(Tokens.RouterService);
@@ -130,14 +192,36 @@ async function proxyOpenAI(c: ProxyContext, upstreamPath: string): Promise<Respo
       upstreamBody: body,
       upstreamModel: typeof body.model === 'string' ? body.model : null,
       bodyBytes: new TextEncoder().encode(bodyText).length,
+      clientEndpoint,
+      clientStream: body.stream === true,
+      incomingHeaders: incomingHeaders(c),
+      signal: c.req.raw.signal,
     });
-    return new Response(result.bodyText, {
-      status: result.status,
-      headers: { 'content-type': result.contentType ?? 'application/json', 'x-provider-key-id': result.providerKeyId },
-    });
+    return proxyResponse(result);
   } catch (error) {
     return errorResponse(error);
   }
+}
+
+async function commandCodeModels(
+  env: Env,
+  userEmail: string,
+  explicitId: string | null,
+): Promise<{ id: string; name: string; providerId: string }[]> {
+  const scope = createRequestScope(env);
+  const providers = await scope.get(Tokens.ProviderService).listProviders(userEmail);
+  const provider = explicitId
+    ? providers.find((p) => p.id === explicitId && p.kind === 'COMMAND_CODE')
+    : providers.find((p) => p.status === 'active' && p.kind === 'COMMAND_CODE');
+  if (!provider) return [];
+  const keyService = scope.get(Tokens.ProviderKeyService);
+  const keys = await keyService.listKeys(provider.id, userEmail).catch(() => []);
+  const key = keys.find((k) => k.status === 'active') ?? keys[0];
+  if (!key) return [];
+  const secret = await keyService.decryptSecret(provider.id, key.id, userEmail).catch(() => null);
+  if (!secret) return [];
+  const models = await scope.get(Tokens.CommandCodeService).listModels(provider.id, secret, provider.baseUrl);
+  return models.map((model) => ({ id: model.id, name: model.name, providerId: provider.id }));
 }
 
 function registerProxyRoutes(app: ProxyApp): void {
@@ -150,12 +234,36 @@ function registerProxyRoutes(app: ProxyApp): void {
     try {
       const scope = createRequestScope(c.env);
       const providers = await scope.get(Tokens.ProviderService).listProviders(gateway.userEmail);
-      return c.json({
-        object: 'list',
-        data: providers
-          .filter((p) => p.status === 'active')
-          .map((p) => ({ id: p.name, object: 'model', owned_by: p.kind.toLowerCase(), provider_id: p.id, kind: p.kind })),
-      });
+      const entries = providers
+        .filter((p) => p.status === 'active' && p.kind !== 'COMMAND_CODE')
+        .map((p) => ({ id: p.name, object: 'model', owned_by: p.kind.toLowerCase(), provider_id: p.id, kind: p.kind }));
+      // Command Code models are namespaced (`provider/model`), so list the
+      // upstream catalogue when a Command Code provider is configured.
+      if (providers.some((p) => p.status === 'active' && p.kind === 'COMMAND_CODE')) {
+        const models = await commandCodeModels(c.env, gateway.userEmail, null).catch(() => []);
+        for (const model of models) {
+          entries.push({
+            id: model.id,
+            object: 'model',
+            owned_by: 'command_code',
+            provider_id: model.providerId,
+            kind: 'COMMAND_CODE',
+          });
+        }
+      }
+      return c.json({ object: 'list', data: entries });
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
+
+  app.get('/commandcode/v1/models', async (c) => {
+    const gateway = await MiddlewareHandlers.requireGateway(c as never);
+    if (gateway instanceof Response) return gateway;
+    const explicitId = c.req.header('x-provider-id')?.trim() || null;
+    try {
+      const models = await commandCodeModels(c.env, gateway.userEmail, explicitId);
+      return c.json({ object: 'list', data: models });
     } catch (error) {
       return errorResponse(error);
     }
@@ -165,7 +273,7 @@ function registerProxyRoutes(app: ProxyApp): void {
     const gateway = await MiddlewareHandlers.requireGateway(c as never);
     if (gateway instanceof Response) return gateway;
     const rawBody = await c.req.json().catch(() => null);
-    const body = rawBody as { model?: unknown } | null;
+    const body = rawBody as { model?: unknown; stream?: unknown } | null;
     if (!body || typeof body !== 'object')
       return Response.json({ error: { message: 'Invalid JSON body', type: 'invalid_request_error' } }, { status: 400 });
     const explicitId = c.req.header('x-provider-id')?.trim() || null;
@@ -175,7 +283,7 @@ function registerProxyRoutes(app: ProxyApp): void {
     } catch (error) {
       return errorResponse(error);
     }
-    if (provider.kind !== 'ANTHROPIC') {
+    if (provider.kind !== 'ANTHROPIC' && provider.kind !== 'COMMAND_CODE') {
       return Response.json(
         { error: { message: 'Resolved provider is not Anthropic; set x-provider-id', type: 'invalid_request_error' } },
         { status: 400 },
@@ -189,17 +297,18 @@ function registerProxyRoutes(app: ProxyApp): void {
         userEmail: gateway.userEmail,
         gatewayKeyId: gateway.keyId,
         providerId: provider.id,
-        providerKind: 'ANTHROPIC',
+        providerKind: provider.kind,
         providerBaseUrl: provider.baseUrl,
         upstreamPath: '/v1/messages',
         upstreamBody: body,
         upstreamModel: typeof body.model === 'string' ? body.model : null,
         bodyBytes: new TextEncoder().encode(bodyText).length,
+        clientEndpoint: 'anthropic',
+        clientStream: body.stream === true,
+        incomingHeaders: incomingHeaders(c),
+        signal: c.req.raw.signal,
       });
-      return new Response(result.bodyText, {
-        status: result.status,
-        headers: { 'content-type': 'application/json', 'x-provider-key-id': result.providerKeyId },
-      });
+      return proxyResponse(result);
     } catch (error) {
       return errorResponse(error);
     }
