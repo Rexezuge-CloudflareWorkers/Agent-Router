@@ -1,5 +1,5 @@
 import { BaseDAO } from './BaseDAO';
-import type { D1Queryable } from '../utils/D1Types';
+import type { D1Queryable } from '@rexezuge/d1';
 import type { UsageLedgerMetadata } from '@agent-router/shared';
 
 export interface UsageLedgerRow {
@@ -59,7 +59,7 @@ class UsageLedgerDAO extends BaseDAO {
     now: number;
   }): Promise<void> {
     const total = row.promptTokens + row.completionTokens;
-    await this.withRetry(
+    await this.run(
       () =>
         this.database
           .prepare(
@@ -89,7 +89,11 @@ class UsageLedgerDAO extends BaseDAO {
     );
   }
 
-  public async listByUser(userEmail: string, limit: number, cursor?: string): Promise<{ rows: UsageLedgerMetadata[]; nextCursor: string | null }> {
+  public async listByUser(
+    userEmail: string,
+    limit: number,
+    cursor?: string,
+  ): Promise<{ rows: UsageLedgerMetadata[]; nextCursor: string | null }> {
     const since = this.decodeCursor<{ createdAt: string; id: string }>(cursor);
     let rows: UsageLedgerRow[];
     if (since) {
@@ -116,7 +120,10 @@ class UsageLedgerDAO extends BaseDAO {
     return { rows: page.map(toMetadata), nextCursor };
   }
 
-  public async summarizeByUser(userEmail: string, since: number): Promise<{ totalTokens: number; totalRequests: number; promptTokens: number; completionTokens: number }> {
+  public async summarizeByUser(
+    userEmail: string,
+    since: number,
+  ): Promise<{ totalTokens: number; totalRequests: number; promptTokens: number; completionTokens: number }> {
     const row = await this.database
       .prepare(
         `SELECT COALESCE(SUM(total_tokens),0) AS totalTokens, COUNT(*) AS totalRequests,
@@ -133,7 +140,10 @@ class UsageLedgerDAO extends BaseDAO {
     };
   }
 
-  public async summarizeByProvider(userEmail: string, since: number): Promise<Array<{ providerId: string; totalTokens: number; totalRequests: number }>> {
+  public async summarizeByProvider(
+    userEmail: string,
+    since: number,
+  ): Promise<Array<{ providerId: string; totalTokens: number; totalRequests: number }>> {
     const result = await this.database
       .prepare(
         `SELECT provider_id AS providerId, COALESCE(SUM(total_tokens),0) AS totalTokens, COUNT(*) AS totalRequests
@@ -142,7 +152,9 @@ class UsageLedgerDAO extends BaseDAO {
       )
       .bind(userEmail, since)
       .all<{ providerId: string | null; totalTokens: number; totalRequests: number }>();
-    return (result.results ?? []).filter((r): r is { providerId: string; totalTokens: number; totalRequests: number } => typeof r.providerId === 'string');
+    return (result.results ?? []).filter(
+      (r): r is { providerId: string; totalTokens: number; totalRequests: number } => typeof r.providerId === 'string',
+    );
   }
 
   public async pruneOlderThan(cutoff: number, limit: number): Promise<number> {

@@ -8,7 +8,7 @@ import {
   generateFingerprint,
   CommandCodeService,
 } from '@agent-router/backend-services/commandcode';
-import { CommandCodeAccumulator, parseLine } from '@agent-router/backend-services/commandcode/CommandCodeEvents';
+import { CommandCodeAccumulator, parseLine } from '@agent-router/provider-clients/commandcode/CommandCodeEvents';
 import { CommandCodeChatTranslator } from '@agent-router/backend-services/commandcode/CommandCodeChatTranslator';
 import { CommandCodeAnthropicTranslator } from '@agent-router/backend-services/commandcode/CommandCodeAnthropicTranslator';
 import { CommandCodeResponsesTranslator } from '@agent-router/backend-services/commandcode/CommandCodeResponsesTranslator';
@@ -20,20 +20,25 @@ function ndjson(events: unknown[]): string {
 }
 
 function serviceFetch(body: string): typeof fetch {
-  return vi.fn(async () => new Response(body, { status: 200, headers: { 'content-type': 'application/x-ndjson' } })) as unknown as typeof fetch;
+  return vi.fn(
+    async () => new Response(body, { status: 200, headers: { 'content-type': 'application/x-ndjson' } }),
+  ) as unknown as typeof fetch;
 }
 
 function makeService(fetchImpl: typeof fetch): CommandCodeService {
-  return new CommandCodeService({ DB: {} as never }, {
-    config,
-    fetchImpl,
-    keyStateDAO: () =>
-      Promise.resolve({
-        get: async () => null,
-        markInitialized: async () => undefined,
-      } as never),
-    salt: async () => 'test-salt',
-  });
+  return new CommandCodeService(
+    { DB: {} as never },
+    {
+      config,
+      fetchImpl,
+      keyStateDAO: () =>
+        Promise.resolve({
+          get: async () => null,
+          markInitialized: async () => {},
+        } as never),
+      salt: async () => 'test-salt',
+    },
+  );
 }
 
 describe('Command Code fingerprint', () => {
@@ -122,8 +127,20 @@ describe('Command Code request conversion', () => {
       model: 'claude-sonnet-4-6',
       system: 'system prompt',
       messages: [
-        { role: 'assistant', content: [{ type: 'thinking', thinking: 'hmm' }, { type: 'tool_use', id: 'tu1', name: 'lookup', input: { q: 1 } }] },
-        { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu1', content: 'result' }, { type: 'text', text: 'next' }] },
+        {
+          role: 'assistant',
+          content: [
+            { type: 'thinking', thinking: 'hmm' },
+            { type: 'tool_use', id: 'tu1', name: 'lookup', input: { q: 1 } },
+          ],
+        },
+        {
+          role: 'user',
+          content: [
+            { type: 'tool_result', tool_use_id: 'tu1', content: 'result' },
+            { type: 'text', text: 'next' },
+          ],
+        },
       ],
     });
     const messages = chat.messages as Array<Record<string, unknown>>;

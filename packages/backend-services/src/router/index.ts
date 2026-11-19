@@ -9,5 +9,5 @@ export {
   extractCodexCompletedResponse,
   extractHtmlPageText,
   tapUsageStream,
-} from './UpstreamClient';
-export type { UpstreamCall, ParsedUsage, UsageTap } from './UpstreamClient';
+} from '@agent-router/provider-clients/upstream';
+export type { UpstreamCall, ParsedUsage, UsageTap } from '@agent-router/provider-clients/upstream';

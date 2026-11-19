@@ -9,3 +9,6 @@ Scope: `apps/web/**`. Parent index: `../../AGENTS.md`.
 - API access: `src/lib/api.ts` (`apiGet/apiPost/apiPatch/apiDelete`) + `src/services/*` (`providerService`, `gatewayKeyService`, `usageService`, `userService`); `src/types.ts` (router domain types only).
 - i18n: `src/i18n.ts` (i18next + `react-i18next`) — single `canonicalizeLanguageTag`; bundles `src/locales/en|zh-CN/translation.json` (currently mirrored; localize `zh-CN` next).
 - English UI text uses Title Case; keep `{{placeholder}}` parity across locales. Validate with `pnpm run validate:locales`.
+
+- Primitives from `@rexezuge/web`: `AppPage`, `PageHeaderCard`, `ReadOnlyField`, `ModalShell`, `PageState`, `RefreshButton`. `Button`, `Card`, `Badge`, `Input`, `ContextBar`, `NoticeBar` stay local (the kit versions restyle or de-couple the router).
+- Local hooks `useNotice`/`useSpaLanguage`/`useCurrentUser` keep their `{ type, text }` notice shape; the kit hooks use `{ kind, message }`, so they are not interchangeable without a call-site rewrite.

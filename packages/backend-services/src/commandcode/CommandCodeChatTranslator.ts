@@ -1,7 +1,7 @@
-import { CommandCodeAccumulator, toOpenAiFinishReason } from './CommandCodeEvents';
+import { CommandCodeAccumulator, toOpenAiFinishReason } from '@agent-router/provider-clients/commandcode/CommandCodeEvents';
 import { openAiChunk, usageRecord } from './CommandCodeTranslator';
 import type { CommandCodeTranslator } from './CommandCodeTranslator';
-import type { CommandCodeEvent, CommandCodeMappedError } from './CommandCodeTypes';
+import type { CommandCodeEvent, CommandCodeMappedError } from '@agent-router/provider-clients/commandcode/CommandCodeTypes';
 
 class CommandCodeChatTranslator implements CommandCodeTranslator {
   public readonly accumulator = new CommandCodeAccumulator();

@@ -18,8 +18,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  checks:
-    name: Checks
+  # Typecheck and lint are separate jobs rather than one job running both, so a
+  # failure names the tool that broke and a retry re-runs only that half.
+  typecheck:
+    name: Typecheck
     runs-on: ubuntu-latest
 
     steps:
@@ -29,15 +31,108 @@ jobs:
       - name: Setup Environment
         uses: ./.github/actions/setup-env
 
-      - name: Run Type Check and Lint
-        run: pnpm -r typecheck && pnpm run lint
+      - name: Run Typecheck
+        uses: ./.github/actions/retry-step
+        with:
+          command: pnpm run typecheck
+          max_attempts: '2'
 
-      - name: Check God-Files (warn-only until remaining splits land)
-        run: node scripts/check-god-files.mjs
-        continue-on-error: true
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup-env
+
+      - name: Run Lint
+        uses: ./.github/actions/retry-step
+        with:
+          command: pnpm run lint
+          max_attempts: '2'
+
+  migrations:
+    name: Migration Lock
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup-env
+
+      # Its own job so a failure names migrations: editing an already-applied
+      # migration is invisible to every other check.
+      - name: Verify Migration Lock
+        uses: ./.github/actions/retry-step
+        with:
+          command: pnpm run validate:migrations
+          max_attempts: '2'
+
+  god-files:
+    name: God Files
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup-env
+
+      # Warn-only today; the remaining splits are tracked separately. Its own job
+      # so the warning is attributable.
+      - name: Check God Files
+        uses: ./.github/actions/retry-step
+        with:
+          command: pnpm run check:god-files
+          max_attempts: '2'
+
+  locales:
+    name: Locales
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup-env
+
+      - name: Validate Locale Bundles
+        uses: ./.github/actions/retry-step
+        with:
+          command: pnpm run validate:locales
+          max_attempts: '2'
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup-env
 
       - name: Run Tests with Coverage
-        run: pnpm run test:coverage
+        uses: ./.github/actions/retry-step
+        with:
+          command: pnpm run test:coverage
+          max_attempts: '2'
+
+      - name: Upload Coverage Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 14
 
   integration-tests:
     name: Integration Tests
@@ -51,10 +146,13 @@ jobs:
         uses: ./.github/actions/setup-env
 
       - name: Run Integration Tests
-        run: pnpm run test:integration
+        uses: ./.github/actions/retry-step
+        with:
+          command: pnpm run test:integration
+          max_attempts: '2'
 
-  build:
-    name: Build
+  build-web:
+    name: Build Web App
     runs-on: ubuntu-latest
 
     steps:
@@ -67,13 +165,41 @@ jobs:
       - name: Build Web App
         run: pnpm --filter @agent-router/web build
 
+  # Verifies the shell the API worker *serves*, a different artifact from
+  # `apps/web/dist/`: it is embedded into `apps/api/src/generated/spa-shell.ts`.
+  spa-shell:
+    name: Verify SPA Shell
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup-env
+
+      - name: Build Web App
+        run: pnpm --filter @agent-router/web build
+
+      - name: Verify The SPA Shell
+        uses: ./.github/actions/retry-step
+        with:
+          command: pnpm run verify:spa-shell
+          max_attempts: '2'
+
   dependabot-auto-merge:
     if: ${{ github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.state == 'open' && !github.event.repository.fork }}
     name: Auto-Merge Dependabot PR
     needs:
-      - checks
+      - typecheck
+      - lint
+      - migrations
+      - god-files
+      - locales
+      - unit-tests
       - integration-tests
-      - build
+      - build-web
+      - spa-shell
     permissions:
       contents: write
       pull-requests: write
@@ -96,9 +222,15 @@ jobs:
     if: ${{ github.event_name == 'repository_dispatch' && github.event.action == 'Upstream Sync' }}
     name: Dispatch Upstream Sync Deployment
     needs:
-      - checks
+      - typecheck
+      - lint
+      - migrations
+      - god-files
+      - locales
+      - unit-tests
       - integration-tests
-      - build
+      - build-web
+      - spa-shell
     permissions:
       contents: write
     runs-on: ubuntu-latest

@@ -1,6 +1,6 @@
 import { UsageLedgerDAO } from '@agent-router/backend-data/dao';
-import type { D1Queryable } from '@agent-router/backend-data/utils';
-import { TimestampUtil } from '@agent-router/shared/utils';
+import type { D1Queryable } from '@rexezuge/d1';
+import { TimestampUtil } from '@rexezuge/shared';
 
 interface UsageServiceEnv {
   DB: D1Queryable;
@@ -23,7 +23,16 @@ class UsageService {
     };
   }
 
-  public async getSummary(userEmail: string, days = 30): Promise<{ totalTokens: number; totalRequests: number; promptTokens: number; completionTokens: number; byProvider: Array<{ providerId: string; totalTokens: number; totalRequests: number }> }> {
+  public async getSummary(
+    userEmail: string,
+    days = 30,
+  ): Promise<{
+    totalTokens: number;
+    totalRequests: number;
+    promptTokens: number;
+    completionTokens: number;
+    byProvider: Array<{ providerId: string; totalTokens: number; totalRequests: number }>;
+  }> {
     const dao = await this.deps.usageDAO();
     const clamped = Math.min(Math.max(days, 1), 90);
     const since = TimestampUtil.getCurrentUnixTimestampInSeconds() - clamped * 86_400;
@@ -32,7 +41,11 @@ class UsageService {
     return { ...totals, byProvider };
   }
 
-  public async listLedger(userEmail: string, limit = 50, cursor?: string): Promise<{ entries: Awaited<ReturnType<UsageLedgerDAO['listByUser']>>['rows']; nextCursor: string | null }> {
+  public async listLedger(
+    userEmail: string,
+    limit = 50,
+    cursor?: string,
+  ): Promise<{ entries: Awaited<ReturnType<UsageLedgerDAO['listByUser']>>['rows']; nextCursor: string | null }> {
     const dao = await this.deps.usageDAO();
     const clamped = Math.min(Math.max(limit, 1), 100);
     const { rows, nextCursor } = await dao.listByUser(userEmail.toLowerCase(), clamped, cursor);

@@ -1,4 +1,4 @@
-import { EnvParser } from '../EnvParser';
+import { EnvParser } from '@rexezuge/runtime';
 import {
   DEFAULT_MAX_PACK_OBJECTS,
   DEFAULT_GIT_CACHE_TTL_SECONDS,

@@ -1,4 +1,4 @@
-import { EnvParser } from '../EnvParser';
+import { EnvParser } from '@rexezuge/runtime';
 import {
   DEFAULT_CODEX_ACCESS_MIN_VALID_SECONDS,
   DEFAULT_CODEX_OAUTH_STATE_EXPIRY_MINUTES,

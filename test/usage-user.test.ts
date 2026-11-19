@@ -35,7 +35,7 @@ describe('UserService', () => {
     };
     const svc = new UserService({ DB: {} as never }, { userDAO: () => Promise.resolve(userDAO as never) });
     await svc.upsertUser('New@Example.com');
-    expect(stored?.username).toBeTruthy();
+    expect((stored as { username: string | null } | null)?.username).toBeTruthy();
     const renamed = await svc.renameUsername('new@example.com', 'new-handle');
     expect(renamed.username).toBe('new-handle');
     await expect(svc.renameUsername('new@example.com', '!!!')).rejects.toThrow();

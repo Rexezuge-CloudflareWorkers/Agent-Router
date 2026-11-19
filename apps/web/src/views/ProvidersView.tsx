@@ -1,7 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AppPage } from '../components/layout/AppPage';
-import { PageHeaderCard } from '../components/layout/PageHeaderCard';
+import { AppPage, PageHeaderCard } from '@rexezuge/web';
 import { Card, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -101,7 +100,7 @@ export function ProvidersView({ showNotice }: { showNotice: (type: 'success' | '
   };
 
   const onRotate = (providerId: string, keyId: string): void => {
-    const secret = globalThis.prompt('Paste Replacement Secret');
+    const secret = prompt('Paste Replacement Secret');
     if (secret) runMutation(rotateProviderKey(providerId, keyId, secret), 'Key Rotated.');
   };
 
@@ -199,7 +198,7 @@ export function ProvidersView({ showNotice }: { showNotice: (type: 'success' | '
     try {
       const flow = await startCodexDevice(providerId, keyId);
       showNotice('success', t('providers.codexDeviceStarted', 'Enter The Code At OpenAI To Approve.'));
-      globalThis.open(flow.verificationUrl, '_blank', 'noopener');
+      open(flow.verificationUrl, '_blank', 'noopener');
       scheduleDevicePoll(providerId, keyId, flow);
     } catch (error) {
       showNotice('error', error instanceof Error ? error.message : t('providers.codexStartFailed', 'Failed To Start Codex Authorization.'));
@@ -211,9 +210,7 @@ export function ProvidersView({ showNotice }: { showNotice: (type: 'success' | '
   };
 
   const onImportCodexToken = (providerId: string, keyId: string): void => {
-    const pasted = globalThis.prompt(
-      t('providers.importTokenPrompt', 'Paste Your Refresh Token Or Auth JSON From The Codex App Or OpenCode'),
-    );
+    const pasted = prompt(t('providers.importTokenPrompt', 'Paste Your Refresh Token Or Auth JSON From The Codex App Or OpenCode'));
     if (pasted) runMutation(importCodexToken(providerId, keyId, pasted), t('providers.codexTokenImported', 'Codex Token Imported.'));
   };
 

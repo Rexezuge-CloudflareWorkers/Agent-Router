@@ -15,10 +15,11 @@
   },
   "dependencies": {
     "@agent-router/backend-data": "workspace:*",
-    "@agent-router/backend-errors": "workspace:*",
     "@agent-router/backend-runtime": "workspace:*",
     "@agent-router/backend-services": "workspace:*",
-    "@agent-router/shared": "workspace:*"
+    "@agent-router/shared": "workspace:*",
+    "@rexezuge/runtime": "1.9.4",
+    "@rexezuge/shared": "1.9.4"
   },
   "devDependencies": {
     "@types/node": "26.6.6",

@@ -1,4 +1,4 @@
-import { EnvParser } from '../EnvParser';
+import { EnvParser } from '@rexezuge/runtime';
 import {
   DEFAULT_COMMAND_CODE_CLI_MODE,
   DEFAULT_COMMAND_CODE_CLI_SESSION_MODE,

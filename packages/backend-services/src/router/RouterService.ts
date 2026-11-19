@@ -1,9 +1,9 @@
 import { ProviderDAO, ProviderKeyDAO, UsageLedgerDAO } from '@agent-router/backend-data/dao';
 import type { ProviderKeyRow } from '@agent-router/backend-data/dao';
-import type { D1Queryable } from '@agent-router/backend-data/utils';
-import { BadRequestError, ExceededLimitError, NotFoundError } from '@agent-router/backend-errors';
+import type { D1Queryable } from '@rexezuge/d1';
+import { BadRequestError, NotFoundError, RateLimitedError } from '@rexezuge/errors';
 import type { ProviderKind } from '@agent-router/shared';
-import { TimestampUtil, UUIDUtil } from '@agent-router/shared/utils';
+import { TimestampUtil, UUIDUtil } from '@rexezuge/shared';
 import { AppConfiguration } from '@agent-router/backend-runtime/config';
 import { KeyCrypto } from '../provider/KeyCrypto';
 import type { CommandCodeEndpoint, CommandCodeService } from '../commandcode';
@@ -15,8 +15,8 @@ import {
   isRetryableStatus,
   parseUsage,
   tapUsageStream,
-} from './UpstreamClient';
-import type { ParsedUsage, UpstreamCall } from './UpstreamClient';
+} from '@agent-router/provider-clients/upstream';
+import type { ParsedUsage, UpstreamCall } from '@agent-router/provider-clients/upstream';
 
 interface RouterServiceEnv {
   DB: D1Queryable;
@@ -164,10 +164,10 @@ class RouterService {
   ): Promise<void> {
     await keyDAO
       .recordSuccess(candidate.id, usage.promptTokens, usage.completionTokens, TimestampUtil.getCurrentUnixTimestampInSeconds())
-      .catch(() => undefined);
+      .catch(() => {});
     const refreshed = await keyDAO.getById(candidate.id).catch(() => null);
     if (refreshed && this.isCapExceeded(refreshed)) {
-      await keyDAO.markExhausted(candidate.id, TimestampUtil.getCurrentUnixTimestampInSeconds()).catch(() => undefined);
+      await keyDAO.markExhausted(candidate.id, TimestampUtil.getCurrentUnixTimestampInSeconds()).catch(() => {});
     }
     await usageDAO
       .insert({
@@ -185,7 +185,7 @@ class RouterService {
         estimated: usage.estimated,
         now: TimestampUtil.getCurrentUnixTimestampInSeconds(),
       })
-      .catch(() => undefined);
+      .catch(() => {});
   }
 
   private async fetchWithTimeout(call: UpstreamCall, timeoutMs: number): Promise<Response> {
@@ -243,13 +243,13 @@ class RouterService {
     const oauthBlocked = candidates.filter((k) => !this.isCapExceeded(k) && this.isOAuthKey(k) && !this.isOAuthUsable(k));
     // Mark newly-capped keys exhausted best-effort (does not block the request).
     for (const key of capped) {
-      await keyDAO.markExhausted(key.id, now).catch(() => undefined);
+      await keyDAO.markExhausted(key.id, now).catch(() => {});
     }
     if (usable.length === 0) {
       if (oauthBlocked.length > 0 && capped.length === 0) {
         throw new BadRequestError('Codex OAuth keys require reconnection. Complete OAuth authorization for the key and retry.');
       }
-      throw new ExceededLimitError('All provider keys are exhausted or cooling. Try again later.');
+      throw new RateLimitedError('All provider keys are exhausted or cooling. Try again later.');
     }
 
     const masterKey = await this.deps.masterKey();
@@ -289,7 +289,7 @@ class RouterService {
                   : TimestampUtil.getCurrentUnixTimestampInSeconds() + Math.ceil(cooldownForFailures(cooldownBase, failures) / 1000);
               await keyDAO
                 .recordFailure(candidate.id, `Upstream ${response.status}`, cooldownUntil, TimestampUtil.getCurrentUnixTimestampInSeconds())
-                .catch(() => undefined);
+                .catch(() => {});
               await usageDAO
                 .insert({
                   id: UUIDUtil.getRandomUUID(),
@@ -306,7 +306,7 @@ class RouterService {
                   estimated: false,
                   now: TimestampUtil.getCurrentUnixTimestampInSeconds(),
                 })
-                .catch(() => undefined);
+                .catch(() => {});
               continue;
             }
             await usageDAO
@@ -325,7 +325,7 @@ class RouterService {
                 estimated: false,
                 now: TimestampUtil.getCurrentUnixTimestampInSeconds(),
               })
-              .catch(() => undefined);
+              .catch(() => {});
             const error = new BadRequestError(response.message.slice(0, 300));
             (error as unknown as { statusCode?: number }).statusCode = response.status;
             throw error;
@@ -333,9 +333,7 @@ class RouterService {
 
           const success = response.result;
           if ('usagePromise' in success) {
-            void success.usagePromise
-              .then((usage) => this.recordUsage(keyDAO, usageDAO, candidate, req, usage, latencyMs))
-              .catch(() => undefined);
+            void success.usagePromise.then((usage) => this.recordUsage(keyDAO, usageDAO, candidate, req, usage, latencyMs)).catch(() => {});
           } else {
             await this.recordUsage(keyDAO, usageDAO, candidate, req, success, latencyMs);
           }
@@ -369,7 +367,7 @@ class RouterService {
               TimestampUtil.getCurrentUnixTimestampInSeconds() + Math.ceil(cooldownForFailures(cooldownBase, failures) / 1000);
             await keyDAO
               .recordFailure(candidate.id, message.slice(0, 500), cooldownUntil, TimestampUtil.getCurrentUnixTimestampInSeconds())
-              .catch(() => undefined);
+              .catch(() => {});
             continue;
           }
         }
@@ -382,7 +380,7 @@ class RouterService {
           const tapped = tapUsageStream(upstream.body);
           void tapped.usage
             .then((usage) => this.recordUsage(keyDAO, usageDAO, candidate, req, usage, latencyMs, upstream.status))
-            .catch(() => undefined);
+            .catch(() => {});
           return {
             status: upstream.status,
             bodyStream: tapped.stream,
@@ -439,7 +437,7 @@ class RouterService {
               : TimestampUtil.getCurrentUnixTimestampInSeconds() + Math.ceil(cooldownForFailures(cooldownBase, failures) / 1000);
           await keyDAO
             .recordFailure(candidate.id, `Upstream ${upstream.status}`, cooldownUntil, TimestampUtil.getCurrentUnixTimestampInSeconds())
-            .catch(() => undefined);
+            .catch(() => {});
           if (failures >= disableAfter) {
             const db = (keyDAO as unknown as { database: { prepare(q: string): { bind(...v: unknown[]): { run(): Promise<unknown> } } } })
               .database;
@@ -447,7 +445,7 @@ class RouterService {
               .prepare(`UPDATE provider_keys SET status = 'disabled', updated_at = ? WHERE id = ?`)
               .bind(TimestampUtil.getCurrentUnixTimestampInSeconds(), candidate.id)
               .run()
-              .catch(() => undefined);
+              .catch(() => {});
           }
           await usageDAO
             .insert({
@@ -465,7 +463,7 @@ class RouterService {
               estimated: false,
               now: TimestampUtil.getCurrentUnixTimestampInSeconds(),
             })
-            .catch(() => undefined);
+            .catch(() => {});
           continue;
         }
         // Non-retryable 4xx: surface upstream message, no failover.
@@ -485,7 +483,7 @@ class RouterService {
             estimated: false,
             now: TimestampUtil.getCurrentUnixTimestampInSeconds(),
           })
-          .catch(() => undefined);
+          .catch(() => {});
         const error = RouterService.toUpstreamError(req.providerKind, upstream.status, bodyText, lastError, lastAccountRouted);
         (error as unknown as { statusCode?: number }).statusCode = upstream.status;
         throw error;
@@ -502,7 +500,7 @@ class RouterService {
           TimestampUtil.getCurrentUnixTimestampInSeconds() + Math.ceil(cooldownForFailures(cooldownBase, failures) / 1000);
         await keyDAO
           .recordFailure(candidate.id, message.slice(0, 500), cooldownUntil, TimestampUtil.getCurrentUnixTimestampInSeconds())
-          .catch(() => undefined);
+          .catch(() => {});
       }
     }
     // lastError carries the final upstream body slice (<=300 chars, no
@@ -510,7 +508,7 @@ class RouterService {
     // cooldown instead of guessing behind a generic message.
     if (lastStatus === 429) {
       const detail = lastError.slice(0, 200).trim();
-      throw new ExceededLimitError(
+      throw new RateLimitedError(
         detail && detail !== 'Upstream request failed'
           ? `All provider keys are rate limited. Upstream: ${detail}`
           : 'All provider keys are rate limited. Try again later.',

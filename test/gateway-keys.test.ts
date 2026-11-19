@@ -38,7 +38,7 @@ function makeService() {
           lastUsedAt: null,
           createdAt: (r.now ?? r.created_at) as number,
         })),
-    touchLastUsed: async () => undefined,
+    touchLastUsed: async () => {},
     revoke: async (keyId: string) => {
       const found = rows.find((r) => (r.keyId ?? r.key_id) === keyId);
       if (found) found.status = 'revoked';
@@ -48,7 +48,7 @@ function makeService() {
   const env = { DB: {} as never };
   const svc = new GatewayKeyService(env, {
     gatewayKeyDAO: () => Promise.resolve(dao as never),
-    userDAO: () => Promise.resolve({ getByEmail: async () => null, upsertUser: async () => undefined } as never),
+    userDAO: () => Promise.resolve({ getByEmail: async () => null, upsertUser: async () => {} } as never),
     config: AppConfiguration.fromEnv(env),
   });
   return { svc, rows };
@@ -77,9 +77,9 @@ describe('GatewayKeyService', () => {
       gatewayKeyDAO: () =>
         Promise.resolve({
           listByUser: async () => [{ keyId: 'x', status: 'active' }],
-          create: async () => undefined,
+          create: async () => {},
         } as never),
-      userDAO: () => Promise.resolve({ getByEmail: async () => ({ email: 'a' }), upsertUser: async () => undefined } as never),
+      userDAO: () => Promise.resolve({ getByEmail: async () => ({ email: 'a' }), upsertUser: async () => {} } as never),
       config: AppConfiguration.fromEnv(env),
     });
     expect(capped).toBeDefined();

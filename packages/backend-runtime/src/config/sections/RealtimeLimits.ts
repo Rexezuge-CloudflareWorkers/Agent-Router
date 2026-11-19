@@ -1,4 +1,4 @@
-import { EnvParser } from '../EnvParser';
+import { EnvParser } from '@rexezuge/runtime';
 import {
   DEFAULT_REALTIME_ENABLED,
   DEFAULT_REALTIME_MAX_CONN_PER_INBOX_SHARD,

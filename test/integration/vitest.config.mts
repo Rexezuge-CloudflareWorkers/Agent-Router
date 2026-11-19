@@ -1,29 +1,27 @@
-import { defineConfig } from 'vitest/config';
+import { defineIntegrationVitestConfig } from '@rexezuge/tooling/vitest-integration';
 import { cloudflareTest, cloudflarePool } from '@cloudflare/vitest-pool-workers';
 import { fileURLToPath } from 'node:url';
 import { readFileSync, readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
+import path from 'node:path';
 
-const apiSrcPath = fileURLToPath(new URL('../../apps/api/src', import.meta.url));
-const backgroundSrcPath = fileURLToPath(new URL('../../apps/background/src', import.meta.url));
-const backendDataSrcPath = fileURLToPath(new URL('../../packages/backend-data/src', import.meta.url));
-const backendErrorsSrcPath = fileURLToPath(new URL('../../packages/backend-errors/src', import.meta.url));
-const backendRuntimeSrcPath = fileURLToPath(new URL('../../packages/backend-runtime/src', import.meta.url));
-const backendServicesSrcPath = fileURLToPath(new URL('../../packages/backend-services/src', import.meta.url));
-const sharedSrcPath = fileURLToPath(new URL('../../packages/shared/src', import.meta.url));
-
-const migrationsDir = resolve(fileURLToPath(new URL('../../migrations', import.meta.url)));
-// Top-level migration files only: migrations/_archive/ holds the
-// pre-rewrite legacy schema and must never be applied to the test database.
+const migrationsDir = path.resolve(fileURLToPath(new URL('../../migrations', import.meta.url)));
 const migrationFiles = readdirSync(migrationsDir)
   .filter((f) => f.endsWith('.sql'))
-  .sort();
-const migrationSql = migrationFiles.map((f) => readFileSync(resolve(migrationsDir, f), 'utf-8')).join('\n\n');
+  .toSorted((left, right) => left.localeCompare(right));
+const migrationSql = migrationFiles.map((f) => readFileSync(path.resolve(migrationsDir, f), 'utf8')).join('\n\n');
 
-export default defineConfig({
-  define: {
-    __INTEGRATION_MIGRATION_SQL__: JSON.stringify(migrationSql),
-  },
+/**
+The workerd integration suite, on the kit's factory.
+
+The factory generates the `@agent-router/* → src` table from `scope`, so this
+table cannot drift from the unit suite's. The plugins, pool and define blocks
+below are harness wiring the factory passes through untouched.
+*/
+export default defineIntegrationVitestConfig({
+  scope: '@agent-router',
+  root: new URL('../../', import.meta.url).href,
+  packages: ['shared', 'backend-runtime', 'backend-data', 'provider-clients', 'backend-services'],
+  include: ['test/integration/**/*.int.test.ts'],
   plugins: [
     cloudflareTest({
       wrangler: {
@@ -31,38 +29,13 @@ export default defineConfig({
       },
     }),
   ],
-  test: {
-    globals: true,
-    include: ['test/integration/**/*.int.test.ts'],
-    coverage: {
-      provider: 'v8',
-      reporter: ['text', 'lcov', 'html'],
-      reportsDirectory: './coverage-integration',
-      include: ['apps/api/src/**/*.ts', 'apps/background/src/**/*.ts', 'packages/**/src/**/*.ts'],
-      exclude: ['**/*.test.ts', '**/*.int.test.ts', '**/*.d.ts', '**/index.ts', '**/types.d.ts'],
-      // NOTE: V8 coverage instrumentation is not functional with @cloudflare/vitest-pool-workers
-      // because the Cloudflare Workers sandbox does not expose node:inspector/promises.
-      // Run `pnpm run test:integration` (without --coverage) for integration testing.
-      // Coverage thresholds are omitted intentionally — they would always fail at 0%.
+  pool: cloudflarePool({
+    wrangler: {
+      configPath: './test/integration/wrangler.test.jsonc',
     },
-    pool: cloudflarePool({
-      wrangler: {
-        configPath: './test/integration/wrangler.test.jsonc',
-      },
-    }),
+  }),
+  define: {
+    __INTEGRATION_MIGRATION_SQL__: JSON.stringify(migrationSql),
   },
-  ssr: {
-    noExternal: ['hono', 'chanfana', '@agent-router'],
-  },
-  resolve: {
-    alias: [
-      { find: '@agent-router/background', replacement: backgroundSrcPath },
-      { find: '@agent-router/backend-data', replacement: backendDataSrcPath },
-      { find: '@agent-router/backend-errors', replacement: backendErrorsSrcPath },
-      { find: '@agent-router/backend-runtime', replacement: backendRuntimeSrcPath },
-      { find: '@agent-router/backend-services', replacement: backendServicesSrcPath },
-      { find: '@agent-router/shared', replacement: sharedSrcPath },
-      { find: /^@\//, replacement: `${apiSrcPath}/` },
-    ],
-  },
+  ssrNoExternal: ['hono', 'chanfana', '@agent-router'],
 });

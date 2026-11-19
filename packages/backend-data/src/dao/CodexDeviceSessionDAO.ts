@@ -1,5 +1,5 @@
 import { BaseDAO } from './BaseDAO';
-import type { D1Queryable } from '../utils/D1Types';
+import type { D1Queryable } from '@rexezuge/d1';
 
 export interface CodexDeviceSessionRow {
   device_auth_id: string;
@@ -54,7 +54,7 @@ class CodexDeviceSessionDAO extends BaseDAO {
     now: number;
     expiresAt: number;
   }): Promise<void> {
-    await this.withRetry(
+    await this.run(
       () =>
         this.database
           .prepare(
@@ -92,7 +92,7 @@ class CodexDeviceSessionDAO extends BaseDAO {
   }
 
   public async consume(deviceAuthId: string, now: number): Promise<void> {
-    await this.withRetry(
+    await this.run(
       () =>
         this.database
           .prepare('UPDATE codex_device_sessions SET consumed_at = ? WHERE device_auth_id = ? AND consumed_at IS NULL')
@@ -103,14 +103,14 @@ class CodexDeviceSessionDAO extends BaseDAO {
   }
 
   public async deleteByKey(providerKeyId: string): Promise<void> {
-    await this.withRetry(
+    await this.run(
       () => this.database.prepare('DELETE FROM codex_device_sessions WHERE provider_key_id = ?').bind(providerKeyId).run(),
       'delete codex device sessions by key',
     );
   }
 
   public async deleteExpiredOrConsumed(now: number, limit: number): Promise<number> {
-    const result = await this.withRetry(
+    const result = await this.run(
       () =>
         this.database
           .prepare(

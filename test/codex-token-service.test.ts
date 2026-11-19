@@ -66,7 +66,10 @@ function makeService(current: Record<string, unknown>, fetchImpl?: typeof fetch)
 describe('CodexTokenService', () => {
   it('reuses cached access tokens until the validity margin', async () => {
     const fetchImpl = vi.fn(async () => new Response('{}', { status: 500 }));
-    const { svc } = makeService(row({ encrypted_access_token: await enc('at-cached'), encrypted_refresh_token: await enc('rt'), access_expires_at: NOW + 3600 }), fetchImpl as unknown as typeof fetch);
+    const { svc } = makeService(
+      row({ encrypted_access_token: await enc('at-cached'), encrypted_refresh_token: await enc('rt'), access_expires_at: NOW + 3600 }),
+      fetchImpl as unknown as typeof fetch,
+    );
     const result = await svc.getAccessToken('p1', 'k1', 'u@x.y');
     expect(result.accessToken).toBe('at-cached');
     expect(result.accountId).toBe('acc-1');
@@ -74,8 +77,13 @@ describe('CodexTokenService', () => {
   });
 
   it('rotates single-use refresh tokens and persists both halves', async () => {
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ access_token: 'at-new', refresh_token: 'rt-new', expires_in: 7200 }), { status: 200 }));
-    const { svc, events } = makeService(row({ encrypted_refresh_token: await enc('rt-old'), access_expires_at: NOW - 10 }), fetchImpl as unknown as typeof fetch);
+    const fetchImpl = vi.fn(async () =>
+      Response.json({ access_token: 'at-new', refresh_token: 'rt-new', expires_in: 7200 }, { status: 200 }),
+    );
+    const { svc, events } = makeService(
+      row({ encrypted_refresh_token: await enc('rt-old'), access_expires_at: NOW - 10 }),
+      fetchImpl as unknown as typeof fetch,
+    );
     const result = await svc.getAccessToken('p1', 'k1', 'u@x.y');
     expect(result.accessToken).toBe('at-new');
     const conditional = events.find((e) => e.name === 'conditional');
@@ -85,16 +93,23 @@ describe('CodexTokenService', () => {
   });
 
   it('marks keys revoked on invalid_grant and surfaces a reconnect error', async () => {
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ error: 'invalid_grant' }), { status: 400 }));
-    const { svc, events } = makeService(row({ encrypted_refresh_token: await enc('rt-dead'), access_expires_at: NOW - 10 }), fetchImpl as unknown as typeof fetch);
+    const fetchImpl = vi.fn(async () => Response.json({ error: 'invalid_grant' }, { status: 400 }));
+    const { svc, events } = makeService(
+      row({ encrypted_refresh_token: await enc('rt-dead'), access_expires_at: NOW - 10 }),
+      fetchImpl as unknown as typeof fetch,
+    );
     await expect(svc.getAccessToken('p1', 'k1', 'u@x.y')).rejects.toThrow(/reconnect/i);
     expect(events.some((e) => e.name === 'setStatus' && (e.args as unknown[])[1] === 'revoked')).toBe(true);
   });
 
   it('falls through to the rotation winner on conditional-update loss', async () => {
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ access_token: 'at-loser', refresh_token: 'rt-loser' }), { status: 200 }));
+    const fetchImpl = vi.fn(async () => Response.json({ access_token: 'at-loser', refresh_token: 'rt-loser' }, { status: 200 }));
     const stale = row({ encrypted_refresh_token: await enc('rt-stale'), access_expires_at: NOW - 5 });
-    const winner = row({ encrypted_access_token: await enc('at-winner'), encrypted_refresh_token: await enc('rt-winner'), access_expires_at: NOW + 5000 });
+    const winner = row({
+      encrypted_access_token: await enc('at-winner'),
+      encrypted_refresh_token: await enc('rt-winner'),
+      access_expires_at: NOW + 5000,
+    });
     let reads = 0;
     const events: string[] = [];
     const providerKeyDAO = {
@@ -102,7 +117,7 @@ describe('CodexTokenService', () => {
         reads += 1;
         return reads <= 2 ? stale : winner;
       },
-      setOAuthStatus: async () => undefined,
+      setOAuthStatus: async () => {},
       updateOAuthRefreshedConditional: async () => {
         events.push('conditional');
         return false;
@@ -123,8 +138,11 @@ describe('CodexTokenService', () => {
   });
 
   it('refreshExpiring counts refreshed keys', async () => {
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ access_token: 'at', refresh_token: 'rt' }), { status: 200 }));
-    const { svc } = makeService(row({ encrypted_refresh_token: await enc('rt'), access_expires_at: NOW - 60 }), fetchImpl as unknown as typeof fetch);
+    const fetchImpl = vi.fn(async () => Response.json({ access_token: 'at', refresh_token: 'rt' }, { status: 200 }));
+    const { svc } = makeService(
+      row({ encrypted_refresh_token: await enc('rt'), access_expires_at: NOW - 60 }),
+      fetchImpl as unknown as typeof fetch,
+    );
     const summary = await svc.refreshExpiring(50);
     expect(summary.refreshed).toBe(1);
     expect(summary.revoked).toBe(0);

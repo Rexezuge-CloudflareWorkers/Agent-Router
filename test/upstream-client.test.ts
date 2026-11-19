@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { buildCodexCall, buildUpstreamCall, extractCodexCompletedResponse, extractHtmlPageText, isRetryableStatus, parseUsage } from '@agent-router/backend-services/router';
+import {
+  buildCodexCall,
+  buildUpstreamCall,
+  extractCodexCompletedResponse,
+  extractHtmlPageText,
+  isRetryableStatus,
+  parseUsage,
+} from '@agent-router/backend-services/router';
 
 describe('UpstreamClient', () => {
   it('builds OpenAI bearer calls', () => {
@@ -36,7 +43,8 @@ describe('UpstreamClient', () => {
     expect(call.input).toEqual([{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hi' }] }]);
     expect(call.store).toBe(false);
     const passthrough = JSON.parse(
-      buildCodexCall(null, '/responses', 'at-1', null, { model: 'gpt-5.5', input: [{ type: 'message', role: 'user', content: 'hi' }] }).body,
+      buildCodexCall(null, '/responses', 'at-1', null, { model: 'gpt-5.5', input: [{ type: 'message', role: 'user', content: 'hi' }] })
+        .body,
     ) as { input: unknown };
     expect(passthrough.input).toEqual([{ type: 'message', role: 'user', content: 'hi' }]);
   });
@@ -84,7 +92,12 @@ describe('UpstreamClient', () => {
       id: 'r1',
       output: [{ type: 'message', content: [{ type: 'output_text', text: 'hi' }] }],
     });
-    const deltas = ['event: response.output_text.delta', 'data: {"type":"response.output_text.delta","delta":"hey"}', 'event: response.completed', 'data: {"type":"response.completed","response":{"id":"r2","output":[]}}'].join('\n');
+    const deltas = [
+      'event: response.output_text.delta',
+      'data: {"type":"response.output_text.delta","delta":"hey"}',
+      'event: response.completed',
+      'data: {"type":"response.completed","response":{"id":"r2","output":[]}}',
+    ].join('\n');
     expect(JSON.parse(extractCodexCompletedResponse(deltas) as string)).toMatchObject({
       output: [{ content: [{ text: 'hey' }] }],
     });
@@ -105,8 +118,15 @@ describe('UpstreamClient', () => {
   });
 
   it('parses usage per kind', () => {
-    expect(parseUsage('OPENAI', { usage: { prompt_tokens: 5, completion_tokens: 7 } })).toMatchObject({ promptTokens: 5, completionTokens: 7, estimated: false });
-    expect(parseUsage('ANTHROPIC', { usage: { input_tokens: 4, output_tokens: 6 } })).toMatchObject({ promptTokens: 4, completionTokens: 6 });
+    expect(parseUsage('OPENAI', { usage: { prompt_tokens: 5, completion_tokens: 7 } })).toMatchObject({
+      promptTokens: 5,
+      completionTokens: 7,
+      estimated: false,
+    });
+    expect(parseUsage('ANTHROPIC', { usage: { input_tokens: 4, output_tokens: 6 } })).toMatchObject({
+      promptTokens: 4,
+      completionTokens: 6,
+    });
     expect(parseUsage('OPENAI', {})).toMatchObject({ estimated: true });
   });
 

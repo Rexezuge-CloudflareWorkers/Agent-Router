@@ -1,5 +1,5 @@
-import type { CommandCodeAccumulator } from './CommandCodeEvents';
-import type { CommandCodeEvent, CommandCodeMappedError } from './CommandCodeTypes';
+import type { CommandCodeAccumulator } from '@agent-router/provider-clients/commandcode/CommandCodeEvents';
+import type { CommandCodeEvent, CommandCodeMappedError } from '@agent-router/provider-clients/commandcode/CommandCodeTypes';
 
 interface CommandCodeTranslator {
   readonly accumulator: CommandCodeAccumulator;

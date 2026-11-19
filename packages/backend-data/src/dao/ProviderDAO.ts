@@ -1,5 +1,5 @@
 import { BaseDAO } from './BaseDAO';
-import type { D1Queryable } from '../utils/D1Types';
+import type { D1Queryable } from '@rexezuge/d1';
 import type { ProviderKind, ProviderMetadata, ProviderStatus } from '@agent-router/shared';
 
 export interface ProviderRow {
@@ -39,7 +39,7 @@ class ProviderDAO extends BaseDAO {
     baseUrl: string | null;
     now: number;
   }): Promise<void> {
-    await this.withRetry(
+    await this.run(
       () =>
         this.database
           .prepare(
@@ -64,10 +64,14 @@ class ProviderDAO extends BaseDAO {
     return (result.results ?? []).map(toMetadata);
   }
 
-  public async update(id: string, userEmail: string, patch: { name?: string; baseUrl?: string | null; status?: ProviderStatus; now: number }): Promise<boolean> {
+  public async update(
+    id: string,
+    userEmail: string,
+    patch: { name?: string; baseUrl?: string | null; status?: ProviderStatus; now: number },
+  ): Promise<boolean> {
     const current = await this.getById(id);
     if (!current || current.userEmail.toLowerCase() !== userEmail.toLowerCase()) return false;
-    await this.withRetry(
+    await this.run(
       () =>
         this.database
           .prepare('UPDATE providers SET name = ?, base_url = ?, status = ?, updated_at = ? WHERE id = ?')
@@ -79,7 +83,7 @@ class ProviderDAO extends BaseDAO {
   }
 
   public async delete(id: string, userEmail: string): Promise<void> {
-    await this.withRetry(
+    await this.run(
       () => this.database.prepare('DELETE FROM providers WHERE id = ? AND lower(user_email) = lower(?)').bind(id, userEmail).run(),
       'delete provider',
     );

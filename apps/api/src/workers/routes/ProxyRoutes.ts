@@ -45,10 +45,10 @@ async function forwardToProxyGateway(c: ProxyContext): Promise<Response> {
     // The DO may answer without consuming a body it rejected (workerd reads
     // the stream after the response otherwise) — cancelling keeps that read
     // from surfacing as an unhandled rejection.
-    void forwarded.body?.cancel().catch(() => undefined);
+    void forwarded.body?.cancel().catch(() => {});
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers: response.headers });
   } catch {
-    void forwarded.body?.cancel().catch(() => undefined);
+    void forwarded.body?.cancel().catch(() => {});
     return Response.json(
       { error: { message: 'Proxy gateway unavailable', type: 'upstream_error' } },
       { status: 503, headers: { 'Retry-After': '5' } },

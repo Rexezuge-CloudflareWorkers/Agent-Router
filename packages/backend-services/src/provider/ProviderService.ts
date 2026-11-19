@@ -1,9 +1,9 @@
 import { ProviderDAO } from '@agent-router/backend-data/dao';
-import type { D1Queryable } from '@agent-router/backend-data/utils';
-import { BadRequestError, NotFoundError } from '@agent-router/backend-errors';
+import type { D1Queryable } from '@rexezuge/d1';
+import { BadRequestError, NotFoundError } from '@rexezuge/errors';
 import { isProviderKind } from '@agent-router/shared';
 import type { ProviderKind, ProviderMetadata } from '@agent-router/shared';
-import { TimestampUtil, UUIDUtil } from '@agent-router/shared/utils';
+import { TimestampUtil, UUIDUtil } from '@rexezuge/shared';
 import { AppConfiguration } from '@agent-router/backend-runtime/config';
 
 interface ProviderServiceEnv {
@@ -103,7 +103,11 @@ class ProviderService {
     return row;
   }
 
-  public async updateProvider(id: string, userEmail: string, patch: { name?: unknown; baseUrl?: unknown; status?: unknown }): Promise<ProviderMetadata> {
+  public async updateProvider(
+    id: string,
+    userEmail: string,
+    patch: { name?: unknown; baseUrl?: unknown; status?: unknown },
+  ): Promise<ProviderMetadata> {
     const current = await this.getProvider(id, userEmail);
     const dao = await this.deps.providerDAO();
     let name = current.name;
@@ -112,7 +116,8 @@ class ProviderService {
       if (!trimmed) throw new BadRequestError('name is required');
       if (trimmed.length > 80) throw new BadRequestError('name must be at most 80 characters');
       const siblings = await dao.listByUser(userEmail.toLowerCase());
-      if (siblings.some((p) => p.id !== id && p.name.toLowerCase() === trimmed.toLowerCase())) throw new BadRequestError('Provider name is already taken');
+      if (siblings.some((p) => p.id !== id && p.name.toLowerCase() === trimmed.toLowerCase()))
+        throw new BadRequestError('Provider name is already taken');
       name = trimmed;
     }
     const baseUrl = patch.baseUrl === undefined ? current.baseUrl : normalizeBaseUrl(current.kind, patch.baseUrl);

@@ -1,10 +1,10 @@
 import { ProviderKeyDAO } from '@agent-router/backend-data/dao';
-import type { D1Queryable } from '@agent-router/backend-data/utils';
-import { BadRequestError, NotFoundError, OAuth2TokenNonRetryableError } from '@agent-router/backend-errors';
+import type { D1Queryable } from '@rexezuge/d1';
+import { BadRequestError, NotFoundError, OAuth2TokenNonRetryableError } from '@rexezuge/errors';
 import { AppConfiguration } from '@agent-router/backend-runtime/config';
-import { TimestampUtil } from '@agent-router/shared/utils';
+import { TimestampUtil } from '@rexezuge/shared';
 import { KeyCrypto } from '../provider/KeyCrypto';
-import { CodexOAuthClient } from './CodexOAuthClient';
+import { CodexOAuthClient } from '@agent-router/provider-clients/codex';
 
 interface CodexTokenServiceEnv {
   DB: D1Queryable;
@@ -109,7 +109,7 @@ class CodexTokenService {
     const key = await keyDAO.getById(keyId);
     this.assertUsable(key, providerId, userEmail);
     if (!key?.encrypted_refresh_token) {
-      await keyDAO.setOAuthStatus(keyId, 'expired', 'Codex authorization is incomplete. Reconnect the key.', now).catch(() => undefined);
+      await keyDAO.setOAuthStatus(keyId, 'expired', 'Codex authorization is incomplete. Reconnect the key.', now).catch(() => {});
       throw new BadRequestError('Codex authorization is incomplete. Reconnect the key.');
     }
     // Another isolate may have rotated already: reuse the fresh access token.
@@ -128,9 +128,7 @@ class CodexTokenService {
     try {
       refreshToken = await KeyCrypto.decrypt(oldEncryptedRefresh, masterKey, 'codex-oauth');
     } catch {
-      await keyDAO
-        .setOAuthStatus(keyId, 'expired', 'Codex credentials cannot be decrypted. Reconnect the key.', now)
-        .catch(() => undefined);
+      await keyDAO.setOAuthStatus(keyId, 'expired', 'Codex credentials cannot be decrypted. Reconnect the key.', now).catch(() => {});
       throw new BadRequestError('Codex authorization is invalid. Reconnect the key.');
     }
     let tokens: Awaited<ReturnType<typeof CodexOAuthClient.refreshAccessToken>>;
@@ -139,7 +137,7 @@ class CodexTokenService {
     } catch (error) {
       if (error instanceof OAuth2TokenNonRetryableError) {
         const message = 'Codex authorization expired or was revoked. Reconnect the key.';
-        await keyDAO.setOAuthStatus(keyId, 'revoked', message, now).catch(() => undefined);
+        await keyDAO.setOAuthStatus(keyId, 'revoked', message, now).catch(() => {});
         throw new BadRequestError(message);
       }
       throw error;
@@ -163,9 +161,7 @@ class CodexTokenService {
           expiresAt: latest.access_expires_at as number,
         };
       }
-      await keyDAO
-        .updateOAuthRefreshed(keyId, { encryptedAccessToken, encryptedRefreshToken, accessExpiresAt, now })
-        .catch(() => undefined);
+      await keyDAO.updateOAuthRefreshed(keyId, { encryptedAccessToken, encryptedRefreshToken, accessExpiresAt, now }).catch(() => {});
     }
     return { accessToken: tokens.accessToken, accountId: tokens.accountId ?? key.codex_account_id ?? null, expiresAt: accessExpiresAt };
   }

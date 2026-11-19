@@ -45,24 +45,24 @@ function row(overrides: Record<string, unknown> = {}) {
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status });
+  return Response.json(body, { status });
 }
 
-/** Routes stub fetch calls to device usercode / device token / oauth token URLs. */
+/**
+Routes stub fetch calls to device usercode / device token / oauth token URLs.
+*/
 function deviceFetchStub(
   opts: {
-    usercode?: { status: number; body: unknown } | Error;
-    deviceToken?: { status: number; body: unknown } | Error;
-    oauthToken?: { status: number; body: unknown } | Error;
+    usercode?: Error | { status: number; body: unknown };
+    deviceToken?: Error | { status: number; body: unknown };
+    oauthToken?: Error | { status: number; body: unknown };
     revoke?: { status: number; body: unknown };
   } = {},
 ) {
   return vi.fn(async (url: unknown) => {
+    const defaultFallback = { status: 403, body: {} };
     const target = String(url);
-    const pick = (
-      entry?: { status: number; body: unknown } | Error,
-      fallback: { status: number; body: unknown } = { status: 403, body: {} },
-    ) => {
+    const pick = (entry?: Error | { status: number; body: unknown }, fallback: { status: number; body: unknown } = defaultFallback) => {
       const chosen = entry ?? fallback;
       if (chosen instanceof Error) throw chosen;
       return jsonResponse(chosen.body, chosen.status);

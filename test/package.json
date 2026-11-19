@@ -1,0 +1,25 @@
+{
+  "name": "@agent-router/test",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "//": "A workspace project so `pnpm -r typecheck` and `pnpm run lint` reach this directory, and so pnpm links the bare specifiers its files import.",
+  "scripts": {
+    "typecheck": "NODE_OPTIONS=--max-old-space-size=4096 tsc --noEmit"
+  },
+  "dependencies": {
+    "@agent-router/backend-data": "workspace:*",
+    "@agent-router/backend-runtime": "workspace:*",
+    "@agent-router/backend-services": "workspace:*",
+    "@agent-router/background": "workspace:*",
+    "@agent-router/provider-clients": "workspace:*",
+    "@agent-router/shared": "workspace:*",
+    "@rexezuge/errors": "1.9.4"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "0.23.0",
+    "@types/node": "26.6.6",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
+  }
+}

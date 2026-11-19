@@ -1,8 +1,8 @@
 import { GatewayKeyDAO, UserDAO } from '@agent-router/backend-data/dao';
-import type { D1Queryable } from '@agent-router/backend-data/utils';
-import { BadRequestError, NotFoundError, UnauthorizedError } from '@agent-router/backend-errors';
+import type { D1Queryable } from '@rexezuge/d1';
+import { BadRequestError, NotFoundError, UnauthorizedError } from '@rexezuge/errors';
 import type { GatewayKeyMetadata } from '@agent-router/shared';
-import { CryptoUtil, TimestampUtil, UUIDUtil } from '@agent-router/shared/utils';
+import { CryptoUtil, TimestampUtil, UUIDUtil } from '@rexezuge/shared';
 import { AppConfiguration } from '@agent-router/backend-runtime/config';
 
 interface GatewayKeyServiceEnv {
@@ -60,7 +60,7 @@ class GatewayKeyService {
     const hash = await GatewayKeyService.hashKey(raw);
     const row = await dao.getByHash(hash, now);
     if (!row) throw new UnauthorizedError('Your gateway key is invalid or has expired.');
-    await dao.touchLastUsed(hash, now).catch(() => undefined);
+    await dao.touchLastUsed(hash, now).catch(() => {});
     return { userEmail: row.user_email.toLowerCase(), keyId: row.key_id };
   }
 
@@ -104,7 +104,15 @@ class GatewayKeyService {
     const raw = `ar_${UUIDUtil.getRandomUUIDNoDash()}${UUIDUtil.getRandomUUIDNoDash()}`;
     const now = TimestampUtil.getCurrentUnixTimestampInSeconds();
     const expiresAt = TimestampUtil.addDays(now, days);
-    await dao.create({ keyId, userEmail: normalized, keyHash: await GatewayKeyService.hashKey(raw), keyPrefix: keyPrefixOf(raw), name: trimmed, expiresAt, now });
+    await dao.create({
+      keyId,
+      userEmail: normalized,
+      keyHash: await GatewayKeyService.hashKey(raw),
+      keyPrefix: keyPrefixOf(raw),
+      name: trimmed,
+      expiresAt,
+      now,
+    });
     return { keyId, key: raw, name: trimmed, expiresAt, prefix: keyPrefixOf(raw) };
   }
 

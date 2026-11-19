@@ -11,6 +11,30 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: 0.23.0
         version: 0.23.0(@cloudflare/workers-types@5.20261110.1)(@vitest/runner@4.1.10)(@vitest/snapshot@4.1.10)(vitest@4.1.10)
+      '@rexezuge/d1':
+        specifier: 1.9.4
+        version: 1.9.4
+      '@rexezuge/errors':
+        specifier: 1.9.4
+        version: 1.9.4
+      '@rexezuge/http':
+        specifier: 1.9.4
+        version: 1.9.4
+      '@rexezuge/i18n':
+        specifier: 1.9.4
+        version: 1.9.4
+      '@rexezuge/runtime':
+        specifier: 1.9.4
+        version: 1.9.4
+      '@rexezuge/shared':
+        specifier: 1.9.4
+        version: 1.9.4
+      '@rexezuge/tooling':
+        specifier: 1.9.4
+        version: 1.9.4(eslint-config-prettier@10.1.8(eslint@10.14.0(jiti@2.7.0)))(eslint-plugin-prettier@5.5.7(eslint-config-prettier@10.1.8(eslint@10.14.0(jiti@2.7.0)))(eslint@10.14.0(jiti@2.7.0))(prettier@3.9.10))(eslint-plugin-regexp@3.3.3(eslint@10.14.0(jiti@2.7.0)))(eslint-plugin-sonarjs@4.2.2(eslint@10.14.0(jiti@2.7.0)))(eslint-plugin-unicorn@79.0.0(eslint@10.14.0(jiti@2.7.0))(typescript@6.0.3))(eslint@10.14.0(jiti@2.7.0))(globals@17.14.0)(jsonc-parser@3.3.1)(prettier@3.9.10)(typescript-eslint@8.72.2(eslint@10.14.0(jiti@2.7.0))(typescript@6.0.3))(typescript@6.0.3)(vitest@4.1.10)
+      '@rexezuge/web':
+        specifier: 1.9.4
+        version: 1.9.4(lucide-react@1.72.0(@types/react@19.3.0)(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@types/node':
         specifier: 26.6.6
         version: 26.6.6
@@ -71,9 +95,6 @@ importers:
       '@agent-router/backend-data':
         specifier: workspace:*
         version: link:../../packages/backend-data
-      '@agent-router/backend-errors':
-        specifier: workspace:*
-        version: link:../../packages/backend-errors
       '@agent-router/backend-runtime':
         specifier: workspace:*
         version: link:../../packages/backend-runtime
@@ -86,6 +107,12 @@ importers:
       '@agent-router/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@rexezuge/errors':
+        specifier: 1.9.4
+        version: 1.9.4
+      '@rexezuge/runtime':
+        specifier: 1.9.4
+        version: 1.9.4
       chanfana:
         specifier: 3.5.0
         version: 3.5.0
@@ -108,9 +135,6 @@ importers:
       '@agent-router/backend-data':
         specifier: workspace:*
         version: link:../../packages/backend-data
-      '@agent-router/backend-errors':
-        specifier: workspace:*
-        version: link:../../packages/backend-errors
       '@agent-router/backend-runtime':
         specifier: workspace:*
         version: link:../../packages/backend-runtime
@@ -120,6 +144,12 @@ importers:
       '@agent-router/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@rexezuge/runtime':
+        specifier: 1.9.4
+        version: 1.9.4
+      '@rexezuge/shared':
+        specifier: 1.9.4
+        version: 1.9.4
     devDependencies:
       '@types/node':
         specifier: 26.6.6
@@ -130,6 +160,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@rexezuge/web':
+        specifier: 1.9.4
+        version: 1.9.4(lucide-react@1.72.0(@types/react@19.3.0)(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       class-variance-authority:
         specifier: 0.7.1
         version: 0.7.1
@@ -191,25 +224,19 @@ importers:
 
   packages/backend-data:
     dependencies:
-      '@agent-router/backend-errors':
-        specifier: workspace:*
-        version: link:../backend-errors
       '@agent-router/shared':
         specifier: workspace:*
         version: link:../shared
+      '@rexezuge/d1':
+        specifier: 1.9.4
+        version: 1.9.4
+      '@rexezuge/errors':
+        specifier: 1.9.4
+        version: 1.9.4
     devDependencies:
       '@cloudflare/workers-types':
         specifier: 5.20261110.1
         version: 5.20261110.1
-      '@types/node':
-        specifier: 26.6.6
-        version: 26.6.6
-      typescript:
-        specifier: 6.0.3
-        version: 6.0.3
-
-  packages/backend-errors:
-    devDependencies:
       '@types/node':
         specifier: 26.6.6
         version: 26.6.6
@@ -222,6 +249,9 @@ importers:
       '@agent-router/shared':
         specifier: workspace:*
         version: link:../shared
+      '@rexezuge/runtime':
+        specifier: 1.9.4
+        version: 1.9.4
     devDependencies:
       '@types/node':
         specifier: 26.6.6
@@ -235,18 +265,43 @@ importers:
       '@agent-router/backend-data':
         specifier: workspace:*
         version: link:../backend-data
-      '@agent-router/backend-errors':
-        specifier: workspace:*
-        version: link:../backend-errors
       '@agent-router/backend-runtime':
         specifier: workspace:*
         version: link:../backend-runtime
+      '@agent-router/provider-clients':
+        specifier: workspace:*
+        version: link:../provider-clients
       '@agent-router/shared':
         specifier: workspace:*
         version: link:../shared
+      '@rexezuge/d1':
+        specifier: 1.9.4
+        version: 1.9.4
+      '@rexezuge/errors':
+        specifier: 1.9.4
+        version: 1.9.4
+      '@rexezuge/shared':
+        specifier: 1.9.4
+        version: 1.9.4
       jose:
         specifier: 6.2.17
         version: 6.2.17
+    devDependencies:
+      '@types/node':
+        specifier: 26.6.6
+        version: 26.6.6
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+
+  packages/provider-clients:
+    dependencies:
+      '@agent-router/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@rexezuge/errors':
+        specifier: 1.9.4
+        version: 1.9.4
     devDependencies:
       '@types/node':
         specifier: 26.6.6
@@ -267,6 +322,43 @@ importers:
       typescript:
         specifier: 6.0.3
         version: 6.0.3
+
+  test:
+    dependencies:
+      '@agent-router/backend-data':
+        specifier: workspace:*
+        version: link:../packages/backend-data
+      '@agent-router/backend-runtime':
+        specifier: workspace:*
+        version: link:../packages/backend-runtime
+      '@agent-router/backend-services':
+        specifier: workspace:*
+        version: link:../packages/backend-services
+      '@agent-router/background':
+        specifier: workspace:*
+        version: link:../apps/background
+      '@agent-router/provider-clients':
+        specifier: workspace:*
+        version: link:../packages/provider-clients
+      '@agent-router/shared':
+        specifier: workspace:*
+        version: link:../packages/shared
+      '@rexezuge/errors':
+        specifier: 1.9.4
+        version: 1.9.4
+    devDependencies:
+      '@cloudflare/vitest-pool-workers':
+        specifier: 0.23.0
+        version: 0.23.0(@cloudflare/workers-types@5.20261110.1)(@vitest/runner@4.1.10)(@vitest/snapshot@4.1.10)(vitest@4.1.10)
+      '@types/node':
+        specifier: 26.6.6
+        version: 26.6.6
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@types/node@26.6.6)(@vitest/coverage-v8@4.1.10)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
 packages:
 
@@ -1204,6 +1296,54 @@ packages:
 
   '@poppinss/exception@1.2.3':
     resolution: {integrity: sha512-dCED+QRChTVatE9ibtoaxc+WkdzOSjYTKi/+uacHWIsfodVfpsueo3+DKpgU5Px8qXjgmXkSvhXvSCz3fnP9lw==}
+
+  '@rexezuge/d1@1.9.4':
+    resolution: {integrity: sha512-8RFxFQtbS8AVxrvXOL1ecMU06HJZX2XaRM36Rer/qca+JI0LEG1KIhc3n2hQ/2tyZA7Ncy0FYc/Q6nMU9mrkSQ==}
+
+  '@rexezuge/errors@1.9.4':
+    resolution: {integrity: sha512-ndAbag3pJ/AvD8lWQVsav1XRqj9Z+c5b+eOV7LeDShVzhOg2qJj5fAXWlRqolt6xIZSY3x1qepKtSZZdS0eOXw==}
+
+  '@rexezuge/http@1.9.4':
+    resolution: {integrity: sha512-rVWC422PxDm9GQSTqZSwo2NlgHQWXhhkNtE1lTC7KYYjoDfTZJ7c+mncFoKGRlPLgr1pLWUI/3w4JbW8f3lqpA==}
+
+  '@rexezuge/i18n@1.9.4':
+    resolution: {integrity: sha512-49U8jqp8lbzQxoccDKJplQ0YvLDpp4TC6uzr5d8KxhaONHIHpHTnW1s98PMIxWabMVjygh7p1m/GA+KrC/c7gw==}
+
+  '@rexezuge/runtime@1.9.4':
+    resolution: {integrity: sha512-BYb1kmmWeCePlj+h+SBm8tppj9CuntKq4+C3eqW3BKRQUD/JxKB8CEnDaCtmCtl3Lgy4cv6rOPMHb2B+yh7zNg==}
+
+  '@rexezuge/shared@1.9.4':
+    resolution: {integrity: sha512-VphnyKOKvT2zsK2A3bgtBPd6sfhIREsY8fdx68QDn6ApxhduqNbrT1K4q6Wlf/d8bIMk6biycxXkjM1ICngSmA==}
+
+  '@rexezuge/tooling@1.9.4':
+    resolution: {integrity: sha512-eqemlUAEsnCfW1eZgUgxLcOuzHlWrHkJlWEfelcK2YzLjLyIZopXXKJ0Mpks9TRyobWujUSGus1nRBtu1LBmLQ==}
+    peerDependencies:
+      eslint: ^10.0.0
+      eslint-config-prettier: ^10.1.8
+      eslint-plugin-prettier: ^5.5.6
+      eslint-plugin-regexp: ^3.3.1
+      eslint-plugin-sonarjs: ^4.2.2
+      eslint-plugin-unicorn: ^76.0.0 || ^78.0.0
+      globals: ^17.13.0
+      jsonc-parser: ^3.3.1
+      prettier: ^3.9.0
+      typescript: ^6.0.0
+      typescript-eslint: ^8.0.0
+      vitest: ^4.0.0
+
+  '@rexezuge/web@1.9.4':
+    resolution: {integrity: sha512-dr8MkcE6MvndPyJDcyMYcjE4M9mqYA2JMIsfjibKSmwtg8Q7cOadx6xYR/HOAUtBI+Mw9LMK8QKo2CEAjLYfoA==}
+    peerDependencies:
+      lucide-react: ^1.49.0
+      react: ^19.3.0
+      react-dom: ^19.3.0
+    peerDependenciesMeta:
+      lucide-react:
+        optional: true
+      react:
+        optional: true
+      react-dom:
+        optional: true
 
   '@rolldown/binding-android-arm-eabi@1.2.19':
     resolution: {integrity: sha512-e+Ebe0WT+9tbXmNKPIiC8YrWAHYwug3m6i4p3rZGGulfZri1jtI4HslT+OZnFf/OIHowWF71DTlHwXBP2SiA7A==}
@@ -3623,6 +3763,52 @@ snapshots:
       supports-color: 10.2.2
 
   '@poppinss/exception@1.2.3': {}
+
+  '@rexezuge/d1@1.9.4':
+    dependencies:
+      '@rexezuge/errors': 1.9.4
+      '@rexezuge/shared': 1.9.4
+
+  '@rexezuge/errors@1.9.4': {}
+
+  '@rexezuge/http@1.9.4':
+    dependencies:
+      '@rexezuge/errors': 1.9.4
+      '@rexezuge/shared': 1.9.4
+      chanfana: 3.5.0
+      hono: 4.13.18
+      jose: 6.2.17
+
+  '@rexezuge/i18n@1.9.4': {}
+
+  '@rexezuge/runtime@1.9.4': {}
+
+  '@rexezuge/shared@1.9.4': {}
+
+  '@rexezuge/tooling@1.9.4(eslint-config-prettier@10.1.8(eslint@10.14.0(jiti@2.7.0)))(eslint-plugin-prettier@5.5.7(eslint-config-prettier@10.1.8(eslint@10.14.0(jiti@2.7.0)))(eslint@10.14.0(jiti@2.7.0))(prettier@3.9.10))(eslint-plugin-regexp@3.3.3(eslint@10.14.0(jiti@2.7.0)))(eslint-plugin-sonarjs@4.2.2(eslint@10.14.0(jiti@2.7.0)))(eslint-plugin-unicorn@79.0.0(eslint@10.14.0(jiti@2.7.0))(typescript@6.0.3))(eslint@10.14.0(jiti@2.7.0))(globals@17.14.0)(jsonc-parser@3.3.1)(prettier@3.9.10)(typescript-eslint@8.72.2(eslint@10.14.0(jiti@2.7.0))(typescript@6.0.3))(typescript@6.0.3)(vitest@4.1.10)':
+    dependencies:
+      '@rexezuge/d1': 1.9.4
+      eslint: 10.14.0(jiti@2.7.0)
+      eslint-config-prettier: 10.1.8(eslint@10.14.0(jiti@2.7.0))
+      eslint-plugin-prettier: 5.5.7(eslint-config-prettier@10.1.8(eslint@10.14.0(jiti@2.7.0)))(eslint@10.14.0(jiti@2.7.0))(prettier@3.9.10)
+      eslint-plugin-regexp: 3.3.3(eslint@10.14.0(jiti@2.7.0))
+      eslint-plugin-sonarjs: 4.2.2(eslint@10.14.0(jiti@2.7.0))
+      eslint-plugin-unicorn: 79.0.0(eslint@10.14.0(jiti@2.7.0))(typescript@6.0.3)
+      globals: 17.14.0
+      jsonc-parser: 3.3.1
+      prettier: 3.9.10
+      typescript: 6.0.3
+      typescript-eslint: 8.72.2(eslint@10.14.0(jiti@2.7.0))(typescript@6.0.3)
+      vitest: 4.1.10(@types/node@26.6.6)(@vitest/coverage-v8@4.1.10)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+
+  '@rexezuge/web@1.9.4(lucide-react@1.72.0(@types/react@19.3.0)(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
+    dependencies:
+      '@rexezuge/errors': 1.9.4
+      '@rexezuge/shared': 1.9.4
+    optionalDependencies:
+      lucide-react: 1.72.0(@types/react@19.3.0)(react@19.3.1)
+      react: 19.3.1
+      react-dom: 19.3.1(react@19.3.1)
 
   '@rolldown/binding-android-arm-eabi@1.2.19':
     optional: true

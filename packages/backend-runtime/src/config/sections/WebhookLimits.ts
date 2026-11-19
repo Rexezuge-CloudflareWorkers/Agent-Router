@@ -1,4 +1,4 @@
-import { EnvParser } from '../EnvParser';
+import { EnvParser } from '@rexezuge/runtime';
 import {
   DEFAULT_MAX_HOOKS_PER_REPO,
   DEFAULT_WEBHOOK_DELIVERY_RETENTION_DAYS,

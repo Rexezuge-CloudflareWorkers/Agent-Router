@@ -1,8 +1,8 @@
 import { ProviderDAO, ProviderKeyDAO } from '@agent-router/backend-data/dao';
-import type { D1Queryable } from '@agent-router/backend-data/utils';
-import { BadRequestError, NotFoundError } from '@agent-router/backend-errors';
+import type { D1Queryable } from '@rexezuge/d1';
+import { BadRequestError, NotFoundError } from '@rexezuge/errors';
 import type { ProviderKeyMetadata, ProviderKeyStatus } from '@agent-router/shared';
-import { TimestampUtil, UUIDUtil } from '@agent-router/shared/utils';
+import { TimestampUtil, UUIDUtil } from '@rexezuge/shared';
 import { AppConfiguration } from '@agent-router/backend-runtime/config';
 import { KeyCrypto } from './KeyCrypto';
 
@@ -65,7 +65,8 @@ class ProviderKeyService {
     const dao = await this.deps.providerDAO();
     const provider = await dao.getById(providerId);
     if (!provider || provider.userEmail.toLowerCase() !== userEmail.toLowerCase()) throw new NotFoundError('Provider not found');
-    if (provider.kind === 'OPENAI_CODEX') throw new BadRequestError('OPENAI_CODEX providers use Codex OAuth keys; connect via the Codex authorize flow');
+    if (provider.kind === 'OPENAI_CODEX')
+      throw new BadRequestError('OPENAI_CODEX providers use Codex OAuth keys; connect via the Codex authorize flow');
   }
 
   private async assertSecretForProvider(providerId: string, userEmail: string, secret: string): Promise<void> {
@@ -143,7 +144,8 @@ class ProviderKeyService {
     let status = current.status as ProviderKeyStatus;
     if (patch.status !== undefined) {
       const allowed: readonly string[] = ['active', 'disabled'];
-      if (typeof patch.status !== 'string' || !allowed.includes(patch.status)) throw new BadRequestError('status must be active or disabled');
+      if (typeof patch.status !== 'string' || !allowed.includes(patch.status))
+        throw new BadRequestError('status must be active or disabled');
       status = patch.status as ProviderKeyStatus;
     }
     const now = TimestampUtil.getCurrentUnixTimestampInSeconds();
@@ -152,7 +154,7 @@ class ProviderKeyService {
       priority:
         patch.priority === undefined || patch.priority === null
           ? undefined
-            : (() => {
+          : (() => {
               const rawPriority: unknown = patch.priority;
               const n = typeof rawPriority === 'string' ? Number(rawPriority.trim()) : (rawPriority as number);
               if (!Number.isSafeInteger(n) || n < 0 || n > 1000) throw new BadRequestError('priority must be an integer 0-1000');
@@ -177,14 +179,23 @@ class ProviderKeyService {
     const dao = await this.deps.providerKeyDAO();
     const current = await dao.getById(keyId);
     if (!current || current.provider_id !== providerId) throw new NotFoundError('Provider key not found');
-    if ((current.auth_type ?? 'static') !== 'static') throw new BadRequestError('OAuth keys cannot rotate static secrets; reconnect via OAuth');
+    if ((current.auth_type ?? 'static') !== 'static')
+      throw new BadRequestError('OAuth keys cannot rotate static secrets; reconnect via OAuth');
     const masterKey = await this.deps.masterKey();
     const now = TimestampUtil.getCurrentUnixTimestampInSeconds();
     // Direct SQL via updateMeta path is insufficient for the secret; update encrypted_key + hint + clear failures.
     const db = (dao as unknown as { database: { prepare(q: string): { bind(...v: unknown[]): { run(): Promise<unknown> } } } }).database;
     await db
-      .prepare('UPDATE provider_keys SET encrypted_key = ?, key_hint = ?, consecutive_failures = 0, cooldown_until = NULL, status = ?, last_error = NULL, updated_at = ? WHERE id = ?')
-      .bind(await KeyCrypto.encrypt(raw, masterKey, 'provider-keys'), KeyCrypto.hintFor(raw), current.status === 'disabled' ? 'disabled' : 'active', now, keyId)
+      .prepare(
+        'UPDATE provider_keys SET encrypted_key = ?, key_hint = ?, consecutive_failures = 0, cooldown_until = NULL, status = ?, last_error = NULL, updated_at = ? WHERE id = ?',
+      )
+      .bind(
+        await KeyCrypto.encrypt(raw, masterKey, 'provider-keys'),
+        KeyCrypto.hintFor(raw),
+        current.status === 'disabled' ? 'disabled' : 'active',
+        now,
+        keyId,
+      )
       .run();
     return (await dao.getMetadataById(keyId)) as ProviderKeyMetadata;
   }

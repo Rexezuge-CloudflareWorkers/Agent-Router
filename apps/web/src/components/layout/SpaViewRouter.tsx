@@ -50,7 +50,14 @@ function SpaViewRouter({ user, setUser, authorized, showNotice, language, onLang
         path="/settings"
         element={
           user ? (
-            <SettingsView user={user} setUser={setUser} showNotice={showNotice} language={language} onLanguageChange={onLanguageChange} languageDisabled={languageDisabled} />
+            <SettingsView
+              user={user}
+              setUser={setUser}
+              showNotice={showNotice}
+              language={language}
+              onLanguageChange={onLanguageChange}
+              languageDisabled={languageDisabled}
+            />
           ) : (
             <AppPage>
               <Unauthorized message={t('errors.signInToManage', 'Sign In To Manage Settings.')} />
@@ -64,7 +71,9 @@ function SpaViewRouter({ user, setUser, authorized, showNotice, language, onLang
           <AppPage>
             <Card>
               <h1 className="text-lg font-semibold text-[var(--color-text-primary)]">{t('errors.pageNotFound', 'Page Not Found')}</h1>
-              <p className="mt-1 text-sm text-[var(--color-text-secondary)]">{t('errors.pageNotFoundDescription', 'The Page You Requested Does Not Exist.')}</p>
+              <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+                {t('errors.pageNotFoundDescription', 'The Page You Requested Does Not Exist.')}
+              </p>
             </Card>
           </AppPage>
         }

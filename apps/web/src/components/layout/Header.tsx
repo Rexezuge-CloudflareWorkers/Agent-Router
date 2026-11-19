@@ -29,7 +29,10 @@ export function Header({ userEmail, username }: { userEmail: string | null; user
                   key={item.path}
                   type="button"
                   onClick={() => navigate(item.path)}
-                  className={cn('px-3.5 py-1.5 rounded-md text-sm transition-colors duration-150', 'text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]')}
+                  className={cn(
+                    'px-3.5 py-1.5 rounded-md text-sm transition-colors duration-150',
+                    'text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]',
+                  )}
                 >
                   {item.label}
                 </button>

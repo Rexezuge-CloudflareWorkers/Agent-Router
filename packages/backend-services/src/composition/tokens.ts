@@ -7,7 +7,7 @@ import type {
   UsageLedgerDAO,
   UserDAO,
 } from '@agent-router/backend-data/dao';
-import type { D1Queryable } from '@agent-router/backend-data/utils';
+import type { D1Queryable } from '@rexezuge/d1';
 import type { Token } from '@agent-router/backend-runtime/di';
 import type { AppConfiguration } from '@agent-router/backend-runtime/config';
 import type { AccessAuthService } from '../auth/AccessAuthService';

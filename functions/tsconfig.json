@@ -1,0 +1,10 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    // Cloudflare Pages Function: the generated Workers types at the repo root
+    // supply `PagesFunction` and `Fetcher`, not `@types/node`.
+    "types": [],
+    "lib": ["ES2022", "DOM"]
+  },
+  "include": ["**/*.ts", "../worker-configuration.d.ts"]
+}

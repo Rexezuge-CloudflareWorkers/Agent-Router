@@ -19,16 +19,12 @@
       "@agent-router/background/*": ["../../apps/background/src/*"],
       "@agent-router/backend-data": ["../../packages/backend-data/src"],
       "@agent-router/backend-data/*": ["../../packages/backend-data/src/*"],
-      "@agent-router/backend-errors": ["../../packages/backend-errors/src"],
-      "@agent-router/backend-errors/*": ["../../packages/backend-errors/src/*"],
       "@agent-router/backend-runtime": ["../../packages/backend-runtime/src"],
       "@agent-router/backend-runtime/*": ["../../packages/backend-runtime/src/*"],
       "@agent-router/backend-services": ["../../packages/backend-services/src"],
       "@agent-router/backend-services/*": ["../../packages/backend-services/src/*"],
-      "@agent-router/git-protocol": ["../../packages/git-protocol/src"],
-      "@agent-router/git-protocol/*": ["../../packages/git-protocol/src/*"],
-      "@agent-router/git-service": ["../../packages/git-service/src"],
-      "@agent-router/git-service/*": ["../../packages/git-service/src/*"],
+      "@agent-router/provider-clients": ["../../packages/provider-clients/src"],
+      "@agent-router/provider-clients/*": ["../../packages/provider-clients/src/*"],
       "@agent-router/shared": ["../../packages/shared/src"],
       "@agent-router/shared/*": ["../../packages/shared/src/*"]
     }

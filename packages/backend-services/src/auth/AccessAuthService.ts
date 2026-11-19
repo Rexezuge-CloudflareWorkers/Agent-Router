@@ -1,6 +1,6 @@
 import { jwtVerify, createRemoteJWKSet } from 'jose';
 import { ConfigurationManager } from '@agent-router/backend-runtime/config';
-import { UnauthorizedError } from '@agent-router/backend-errors';
+import { UnauthorizedError } from '@rexezuge/errors';
 import { DEMO_USER_EMAIL } from '@agent-router/shared/constants';
 
 interface AccessAuthEnv {

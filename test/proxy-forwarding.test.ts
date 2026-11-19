@@ -13,10 +13,9 @@ function context(raw: Request, gateway: { userEmail: string; keyId: string } | n
     env,
     req: { raw, header: (name: string) => raw.headers.get(name) ?? undefined },
     get: (key: string) => {
-      if (!gateway) return undefined;
+      if (!gateway) return;
       if (key === 'GatewayUserEmail') return gateway.userEmail;
       if (key === 'GatewayKeyId') return gateway.keyId;
-      return undefined;
     },
     json: (body: unknown, status: number) => Response.json(body, { status }),
   };

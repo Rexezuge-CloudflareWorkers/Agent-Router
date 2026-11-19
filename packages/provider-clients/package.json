@@ -1,0 +1,25 @@
+{
+  "name": "@agent-router/provider-clients",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./upstream": "./src/upstream/index.ts",
+    "./codex": "./src/codex/index.ts",
+    "./commandcode": "./src/commandcode/index.ts",
+    "./commandcode/*": "./src/commandcode/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@agent-router/shared": "workspace:*",
+    "@rexezuge/errors": "1.9.4"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "typescript": "6.0.3"
+  }
+}

@@ -21,7 +21,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@agent-router/shared": "workspace:*"
+    "@agent-router/shared": "workspace:*",
+    "@rexezuge/runtime": "1.9.4"
   },
   "devDependencies": {
     "@types/node": "26.6.6",

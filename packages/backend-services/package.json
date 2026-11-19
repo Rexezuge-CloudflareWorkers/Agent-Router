@@ -32,10 +32,13 @@
   },
   "dependencies": {
     "@agent-router/backend-data": "workspace:*",
-    "@agent-router/backend-errors": "workspace:*",
     "@agent-router/backend-runtime": "workspace:*",
     "@agent-router/shared": "workspace:*",
-    "jose": "6.2.17"
+    "jose": "6.2.17",
+    "@rexezuge/d1": "1.9.4",
+    "@rexezuge/errors": "1.9.4",
+    "@rexezuge/shared": "1.9.4",
+    "@agent-router/provider-clients": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "26.6.6",

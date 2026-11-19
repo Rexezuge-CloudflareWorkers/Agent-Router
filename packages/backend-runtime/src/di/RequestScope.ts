@@ -1,4 +1,4 @@
-import type { Container } from './Container';
+import type { Container } from '@rexezuge/runtime';
 import { createServiceContext } from './ServiceContext';
 import type { ServiceContext, ServiceContextOverrides } from './ServiceContext';
 import type { ServiceEnv } from '../config/ServiceEnv';
