@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AppPage } from '../components/layout/AppPage';
-import { PageHeaderCard } from '../components/layout/PageHeaderCard';
+import { AppPage, PageHeaderCard } from '@rexezuge/web';
 import { Card, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import type { UsageEntry, UsageSummary } from '../types';
@@ -44,7 +43,8 @@ export function UsageView({ showNotice }: { showNotice: (type: 'success' | 'erro
         </CardHeader>
         {summary ? (
           <p className="text-sm text-[var(--color-text-secondary)]">
-            {summary.totalRequests} Requests · {summary.totalTokens} Tokens ({summary.promptTokens} Prompt / {summary.completionTokens} Completion)
+            {summary.totalRequests} Requests · {summary.totalTokens} Tokens ({summary.promptTokens} Prompt / {summary.completionTokens}{' '}
+            Completion)
           </p>
         ) : (
           <p className="text-sm text-[var(--color-text-secondary)]">Loading…</p>

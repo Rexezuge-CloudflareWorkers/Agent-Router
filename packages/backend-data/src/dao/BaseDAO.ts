@@ -1,6 +1,6 @@
-import type { D1Queryable, D1Result } from '../utils/D1Types';
+import type { D1Queryable, D1Result } from '@rexezuge/d1';
+import { executeWithRetry } from '@rexezuge/d1';
 import { CursorUtil } from '../utils/CursorUtil';
-import { executeD1WithRetry } from '../utils/D1Utils';
 
 const SQL_IDENTIFIER_PATTERN = /^[a-z_]\w*$/i;
 
@@ -10,11 +10,19 @@ function assertSqlIdentifier(value: string, label: string): void {
   }
 }
 
+/**
+Agent-Router's business DAO base.
+
+The retry engine, error classifier and structural D1 types come from
+`@rexezuge/d1`; this class keeps the closure-first helpers the business DAOs
+were written against. The kit's `BaseDAO` is sql-first, and rewriting every
+DAO onto it is a behavioural change that belongs in its own refactor.
+*/
 abstract class BaseDAO {
   constructor(protected readonly database: D1Queryable) {}
 
-  protected withRetry(operation: () => Promise<D1Result>, context: string): Promise<D1Result> {
-    return executeD1WithRetry(operation, context);
+  protected run(operation: () => Promise<D1Result>, context: string): Promise<D1Result> {
+    return executeWithRetry(operation, context);
   }
 
   // Instance variants of the static helpers below, bound to this DAO's
@@ -74,7 +82,7 @@ abstract class BaseDAO {
     assertSqlIdentifier(table, 'table');
     assertSqlIdentifier(timeColumn, 'timeColumn');
     assertSqlIdentifier(idColumn, 'idColumn');
-    const result: D1Result = await executeD1WithRetry(
+    const result: D1Result = await executeWithRetry(
       (): Promise<D1Result> =>
         db
           .prepare(
@@ -93,13 +101,4 @@ abstract class BaseDAO {
   }
 }
 
-abstract class EncryptedDAO extends BaseDAO {
-  constructor(
-    database: D1Queryable,
-    protected readonly masterKey: string,
-  ) {
-    super(database);
-  }
-}
-
-export { BaseDAO, EncryptedDAO };
+export { BaseDAO };

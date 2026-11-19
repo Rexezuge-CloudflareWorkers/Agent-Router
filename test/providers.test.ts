@@ -6,17 +6,44 @@ function makeService(existing: Array<{ id: string; name: string }> = []) {
   const created: Array<Record<string, unknown>> = [];
   const dao = {
     countByUser: async () => existing.length + created.length,
-    listByUser: async () => [...existing.map((e) => ({ ...e, userEmail: 'u@x.y', kind: 'OPENAI', baseUrl: null, status: 'active', createdAt: 1, updatedAt: null })), ...created.map((c) => ({ ...c, userEmail: 'u@x.y', kind: c.kind, baseUrl: c.baseUrl ?? null, status: 'active', createdAt: 1, updatedAt: null }))],
+    listByUser: async () => [
+      ...existing.map((e) => ({
+        ...e,
+        userEmail: 'u@x.y',
+        kind: 'OPENAI',
+        baseUrl: null,
+        status: 'active',
+        createdAt: 1,
+        updatedAt: null,
+      })),
+      ...created.map((c) => ({
+        ...c,
+        userEmail: 'u@x.y',
+        kind: c.kind,
+        baseUrl: c.baseUrl ?? null,
+        status: 'active',
+        createdAt: 1,
+        updatedAt: null,
+      })),
+    ],
     create: async (row: Record<string, unknown>) => {
       created.push(row);
     },
     getById: async (id: string) => {
       const found = [...existing, ...created].find((r) => (r as { id: string }).id === id);
       if (!found) return null;
-      return { ...(found as object), userEmail: 'u@x.y', kind: (found as { kind?: string }).kind ?? 'OPENAI', baseUrl: null, status: 'active', createdAt: 1, updatedAt: null };
+      return {
+        ...(found as object),
+        userEmail: 'u@x.y',
+        kind: (found as { kind?: string }).kind ?? 'OPENAI',
+        baseUrl: null,
+        status: 'active',
+        createdAt: 1,
+        updatedAt: null,
+      };
     },
     update: async () => true,
-    delete: async () => undefined,
+    delete: async () => {},
   };
   const env = { DB: {} as never };
   const svc = new ProviderService(env, { providerDAO: () => Promise.resolve(dao as never), config: AppConfiguration.fromEnv(env) });

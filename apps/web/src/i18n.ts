@@ -13,7 +13,7 @@ const baseResources = {
 } as const;
 
 function canonicalizeTag(tag: string): string {
-  // Mirrors `canonicalizeLanguageTag` in `@agent-router/shared/utils/LanguageTag`
+  // Mirrors `canonicalizeLanguageTag` in `@rexezuge/shared`
   // (web ships with 0 `@agent-router/*` runtime deps, so the 10-line body is
   // intentionally duplicated rather than imported; keep both in sync).
   // eslint-disable-next-line unicorn/prefer-string-replace-all -- tsconfig lib is ES2020 (no replaceAll types)

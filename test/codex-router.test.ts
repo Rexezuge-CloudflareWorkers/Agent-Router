@@ -53,14 +53,14 @@ function makeService(
     recordSuccess: async (id: string) => void events.push(`success:${id}`),
     recordFailure: async (id: string) => void events.push(`failure:${id}`),
     markExhausted: async (id: string) => void events.push(`exhausted:${id}`),
-    database: { prepare: () => ({ bind: () => ({ run: async () => undefined }) }) },
+    database: { prepare: () => ({ bind: () => ({ run: async () => {} }) }) },
   };
   const env = { DB: {} as never };
   const svc = new RouterService(env, {
     providerDAO: () =>
       Promise.resolve({ getById: async () => ({ id: 'p1', user_email: 'u@x.y', userEmail: 'u@x.y', status: 'active' }) } as never),
     providerKeyDAO: () => Promise.resolve(keyDAO as never),
-    usageDAO: () => Promise.resolve({ insert: async () => undefined } as never),
+    usageDAO: () => Promise.resolve({ insert: async () => {} } as never),
     masterKey: async () => MASTER,
     config: AppConfiguration.fromEnv(env),
     fetchImpl,
@@ -70,7 +70,7 @@ function makeService(
 }
 
 function jsonResponse(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+  return Response.json(body, { status, headers: { 'content-type': 'application/json' } });
 }
 
 function proxyInput() {
@@ -133,7 +133,7 @@ describe('RouterService Codex OAuth', () => {
     const json = await svc.proxy({ ...proxyInput(), upstreamBody: { model: 'gpt-5', input: 'hi' } });
     expect(json.status).toBe(200);
     expect(json.contentType).toBe('application/json');
-    expect(JSON.parse(json.bodyText)).toEqual({ id: 'r1', usage: { input_tokens: 2, output_tokens: 1 } });
+    expect(JSON.parse(json.bodyText ?? '')).toEqual({ id: 'r1', usage: { input_tokens: 2, output_tokens: 1 } });
     const relayed = await svc.proxy({ ...proxyInput(), clientStream: true, upstreamBody: { model: 'gpt-5', input: 'hi', stream: true } });
     expect(relayed.contentType).toBe('text/event-stream');
     expect(relayed.bodyStream).toBeInstanceOf(ReadableStream);
@@ -200,6 +200,7 @@ describe('RouterService Codex OAuth', () => {
     const codexTokens = {
       getAccessToken: vi.fn(async (_p: string, keyId: string) => {
         if (keyId === 'k1')
+          // eslint-disable-next-line unicorn/no-error-property-assignment -- mirrors the wire error shape the router narrows on.
           throw Object.assign(new Error('Codex authorization expired or was revoked. Reconnect the key.'), { name: 'BadRequestError' });
         return { accessToken: 'at-2', accountId: 'acc-1' };
       }),

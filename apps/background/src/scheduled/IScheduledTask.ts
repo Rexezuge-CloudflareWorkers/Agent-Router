@@ -1,4 +1,4 @@
-import { createLogger } from '@agent-router/backend-runtime/logger';
+import { createLogger } from '@rexezuge/runtime';
 
 const logger = createLogger('CronTasks');
 

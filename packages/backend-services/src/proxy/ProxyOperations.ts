@@ -1,6 +1,6 @@
 import type { Container } from '@agent-router/backend-runtime/di';
 import type { ProviderKind } from '@agent-router/shared';
-import { ExceededLimitError, NotFoundError, ServiceError } from '@agent-router/backend-errors';
+import { NotFoundError, RateLimitedError, ServiceError } from '@rexezuge/errors';
 import { Tokens, createRequestScope } from '../composition/index';
 
 type ProxyOperationsEnv = Parameters<typeof createRequestScope>[0];
@@ -87,14 +87,14 @@ async function resolveProviderId(
 }
 
 function errorResponse(error: unknown): Response {
-  if (error instanceof ExceededLimitError) {
+  if (error instanceof RateLimitedError) {
     return Response.json(
       { error: { message: error.message, type: 'rate_limit_exceeded', code: 'all_keys_exhausted' } },
       { status: 429, headers: { 'Retry-After': '30' } },
     );
   }
   if (error instanceof ServiceError) {
-    const code = error.getErrorCode();
+    const code = error.status;
     if (code === 400) return Response.json({ error: { message: error.message, type: 'invalid_request_error' } }, { status: 400 });
     if (code === 404) return Response.json({ error: { message: error.message, type: 'not_found' } }, { status: 404 });
   }

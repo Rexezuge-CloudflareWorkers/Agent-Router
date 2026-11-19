@@ -1,4 +1,4 @@
-import { EnvParser } from './EnvParser';
+import { AppConfiguration as BaseAppConfiguration, EnvParser } from '@rexezuge/runtime';
 import {
   DEFAULT_AUDIT_LOG_RETENTION_DAYS,
   DEFAULT_BACKGROUND_TASK_RUN_RETENTION_DAYS,
@@ -46,7 +46,7 @@ thin facade. `ConfigurationManager` statics delegate here for backward
 compatibility. New code should accept `AppConfiguration` via constructor
 injection so env parsing is stubbable.
 */
-class AppConfiguration {
+class AppConfiguration extends BaseAppConfiguration {
   private readonly repos: RepoLimits;
   private readonly git: GitLimits;
   private readonly webhooks: WebhookLimits;
@@ -55,7 +55,8 @@ class AppConfiguration {
   private readonly router: RouterLimits;
   private readonly commandCode: CommandCodeLimits;
 
-  constructor(private readonly env: unknown) {
+  constructor(env: unknown) {
+    super(env);
     this.repos = new RepoLimits(env);
     this.git = new GitLimits(env);
     this.webhooks = new WebhookLimits(env);
@@ -63,10 +64,6 @@ class AppConfiguration {
     this.auth = new AuthConfig(env);
     this.router = new RouterLimits(env);
     this.commandCode = new CommandCodeLimits(env);
-  }
-
-  public static fromEnv(env: unknown): AppConfiguration {
-    return new AppConfiguration(env);
   }
 
   public get repo(): RepoLimits {

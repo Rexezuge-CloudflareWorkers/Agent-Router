@@ -1,4 +1,4 @@
-import { EnvParser } from '../EnvParser';
+import { EnvParser } from '@rexezuge/runtime';
 import {
   DEFAULT_MAX_REPOS_PER_USER,
   DEFAULT_MAX_RULES_PER_REPO,

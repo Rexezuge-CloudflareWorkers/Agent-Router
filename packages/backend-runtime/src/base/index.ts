@@ -1,4 +1,1 @@
-export { AbstractDurableObjectWorker } from './AbstractDurableObjectWorker';
-export { AbstractEntrypointWorker } from './AbstractEntrypointWorker';
-export { AbstractQueueWorker } from './AbstractQueueWorker';
-export { AbstractWorkflowWorker } from './AbstractWorkflowWorker';
+export { AbstractDurableObjectWorker, AbstractEntrypointWorker, AbstractQueueWorker, AbstractWorkflowWorker } from '@rexezuge/runtime';

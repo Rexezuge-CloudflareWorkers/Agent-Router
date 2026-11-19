@@ -1,5 +1,5 @@
 import { BaseDAO } from './BaseDAO';
-import type { D1Queryable } from '../utils/D1Types';
+import type { D1Queryable } from '@rexezuge/d1';
 import type { CodexOAuthStatus, ProviderKeyAuthType, ProviderKeyMetadata, ProviderKeyStatus } from '@agent-router/shared';
 
 export interface ProviderKeyRow {
@@ -84,7 +84,7 @@ class ProviderKeyDAO extends BaseDAO {
     priority: number;
     now: number;
   }): Promise<void> {
-    await this.withRetry(
+    await this.run(
       () =>
         this.database
           .prepare(
@@ -161,7 +161,7 @@ class ProviderKeyDAO extends BaseDAO {
   ): Promise<void> {
     const current = await this.getById(id);
     if (!current) return;
-    await this.withRetry(
+    await this.run(
       () =>
         this.database
           .prepare(
@@ -183,7 +183,7 @@ class ProviderKeyDAO extends BaseDAO {
 
   public async recordSuccess(id: string, promptTokens: number, completionTokens: number, now: number): Promise<void> {
     const total = promptTokens + completionTokens;
-    await this.withRetry(
+    await this.run(
       () =>
         this.database
           .prepare(
@@ -197,7 +197,7 @@ class ProviderKeyDAO extends BaseDAO {
   }
 
   public async recordFailure(id: string, error: string, cooldownUntil: number | null, now: number): Promise<void> {
-    await this.withRetry(
+    await this.run(
       () =>
         this.database
           .prepare(
@@ -211,14 +211,14 @@ class ProviderKeyDAO extends BaseDAO {
   }
 
   public async markExhausted(id: string, now: number): Promise<void> {
-    await this.withRetry(
+    await this.run(
       () => this.database.prepare(`UPDATE provider_keys SET status = 'exhausted', updated_at = ? WHERE id = ?`).bind(now, id).run(),
       'mark key exhausted',
     );
   }
 
   public async clearCooldown(id: string, now: number): Promise<void> {
-    await this.withRetry(
+    await this.run(
       () =>
         this.database
           .prepare(
@@ -231,7 +231,7 @@ class ProviderKeyDAO extends BaseDAO {
   }
 
   public async resetUsage(id: string, resetAt: number | null, now: number): Promise<void> {
-    await this.withRetry(
+    await this.run(
       () =>
         this.database
           .prepare(
@@ -244,7 +244,7 @@ class ProviderKeyDAO extends BaseDAO {
   }
 
   public async resetDueKeys(now: number, limit: number): Promise<number> {
-    const result = await this.withRetry(
+    const result = await this.run(
       () =>
         this.database
           .prepare(
@@ -259,7 +259,7 @@ class ProviderKeyDAO extends BaseDAO {
   }
 
   public async disableFailing(threshold: number, now: number, limit: number): Promise<number> {
-    const result = await this.withRetry(
+    const result = await this.run(
       () =>
         this.database
           .prepare(
@@ -274,7 +274,7 @@ class ProviderKeyDAO extends BaseDAO {
   }
 
   public async delete(id: string): Promise<void> {
-    await this.withRetry(() => this.database.prepare('DELETE FROM provider_keys WHERE id = ?').bind(id).run(), 'delete provider key');
+    await this.run(() => this.database.prepare('DELETE FROM provider_keys WHERE id = ?').bind(id).run(), 'delete provider key');
   }
 
   public async createOAuthKey(row: {
@@ -285,7 +285,7 @@ class ProviderKeyDAO extends BaseDAO {
     priority: number;
     now: number;
   }): Promise<void> {
-    await this.withRetry(
+    await this.run(
       () =>
         this.database
           .prepare(
@@ -312,7 +312,7 @@ class ProviderKeyDAO extends BaseDAO {
       now: number;
     },
   ): Promise<void> {
-    await this.withRetry(
+    await this.run(
       () =>
         this.database
           .prepare(
@@ -330,7 +330,7 @@ class ProviderKeyDAO extends BaseDAO {
     id: string,
     patch: { encryptedAccessToken: string | null; encryptedRefreshToken: string; accessExpiresAt: number; now: number },
   ): Promise<void> {
-    await this.withRetry(
+    await this.run(
       () =>
         this.database
           .prepare(
@@ -349,7 +349,7 @@ class ProviderKeyDAO extends BaseDAO {
     expectedEncryptedRefreshToken: string,
     patch: { encryptedAccessToken: string | null; encryptedRefreshToken: string; accessExpiresAt: number; now: number },
   ): Promise<boolean> {
-    const result = await this.withRetry(
+    const result = await this.run(
       () =>
         this.database
           .prepare(
@@ -372,7 +372,7 @@ class ProviderKeyDAO extends BaseDAO {
   }
 
   public async setOAuthStatus(id: string, status: CodexOAuthStatus, error: string | null, now: number): Promise<void> {
-    await this.withRetry(
+    await this.run(
       () =>
         this.database
           .prepare(`UPDATE provider_keys SET oauth_status = ?, last_error = ?, updated_at = ? WHERE id = ? AND auth_type = 'codex_oauth'`)
@@ -383,7 +383,7 @@ class ProviderKeyDAO extends BaseDAO {
   }
 
   public async clearOAuth(id: string, now: number): Promise<void> {
-    await this.withRetry(
+    await this.run(
       () =>
         this.database
           .prepare(
@@ -410,7 +410,7 @@ class ProviderKeyDAO extends BaseDAO {
   }
 
   public async deleteByProvider(providerId: string): Promise<void> {
-    await this.withRetry(
+    await this.run(
       () => this.database.prepare('DELETE FROM provider_keys WHERE provider_id = ?').bind(providerId).run(),
       'delete provider keys',
     );

@@ -1,11 +1,11 @@
 import { KeyRound, Layers, Route } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
-import { AppPage } from '../components/layout/AppPage';
+import { AppPage } from '@rexezuge/web';
 import { ZERO_TRUST_AUTHENTICATION_PATH } from '../lib/constants';
 
 function signIn() {
-  globalThis.location.assign(ZERO_TRUST_AUTHENTICATION_PATH);
+  location.assign(ZERO_TRUST_AUTHENTICATION_PATH);
 }
 
 export function LandingView() {

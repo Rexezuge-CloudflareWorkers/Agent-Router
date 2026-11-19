@@ -1,7 +1,7 @@
 import type { Hono } from 'hono';
 import { Tokens, createRequestScope } from '@agent-router/backend-services/composition';
 import { tokenIdSchema } from '@agent-router/shared/validation';
-import { ServiceError } from '@agent-router/backend-errors';
+import { ServiceError } from '@rexezuge/errors';
 
 type GatewayApp = Hono<{ Bindings: Env; Variables: { AuthenticatedUserEmailAddress: string } }>;
 
@@ -9,7 +9,7 @@ const RETRYABLE_STATUS_CODES = new Set([400, 401, 403, 404, 429]);
 
 function statusOf(error: unknown): 400 | 401 | 403 | 404 | 429 | 500 {
   if (error instanceof ServiceError) {
-    const code = error.getErrorCode();
+    const code = error.status;
     if (RETRYABLE_STATUS_CODES.has(code)) return code as 400 | 401 | 403 | 404 | 429;
   }
   return 500;

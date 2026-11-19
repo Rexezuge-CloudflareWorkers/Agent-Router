@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "migrations": [
+    {
+      "name": "0001_agent_router.sql",
+      "sha256": "1f4625b06d3347ae2eb604db2dbb065c8245f2b1791e04e66385f4df21e85815"
+    },
+    {
+      "name": "0002_codex_oauth.sql",
+      "sha256": "1cacd8361268b6923e3c8e0d1a2f5d5da217cbef968b4a582d1416296cdc4d9e"
+    },
+    {
+      "name": "0003_codex_device.sql",
+      "sha256": "a614bda6c850330db0c4bd3857770517fa127e23f8c19b3abcc3cbd8a9a16333"
+    },
+    {
+      "name": "0004_command_code.sql",
+      "sha256": "d4f0576c61d969425f37076006a5f57b57537277c09581a584e70f2518c4773a"
+    }
+  ]
+}

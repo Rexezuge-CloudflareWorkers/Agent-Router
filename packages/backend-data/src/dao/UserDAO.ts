@@ -1,5 +1,5 @@
 import { BaseDAO } from './BaseDAO';
-import type { D1Queryable } from '../utils/D1Types';
+import type { D1Queryable } from '@rexezuge/d1';
 
 export interface UserRow {
   email: string;
@@ -14,7 +14,7 @@ class UserDAO extends BaseDAO {
   }
 
   public async upsertUser(email: string, now: number): Promise<void> {
-    await this.withRetry(
+    await this.run(
       () =>
         this.database.prepare('INSERT INTO users (email, created_at) VALUES (?, ?) ON CONFLICT(email) DO NOTHING').bind(email, now).run(),
       'upsert user',
@@ -22,7 +22,7 @@ class UserDAO extends BaseDAO {
   }
 
   public async ensureUsername(email: string, username: string, now: number): Promise<void> {
-    await this.withRetry(
+    await this.run(
       () =>
         this.database
           .prepare('UPDATE users SET username = COALESCE(username, ?), updated_at = COALESCE(updated_at, ?) WHERE email = ?')
@@ -33,7 +33,7 @@ class UserDAO extends BaseDAO {
   }
 
   public async setUsername(email: string, username: string, now: number): Promise<void> {
-    await this.withRetry(
+    await this.run(
       () => this.database.prepare('UPDATE users SET username = ?, updated_at = ? WHERE email = ?').bind(username, now, email).run(),
       'set username',
     );

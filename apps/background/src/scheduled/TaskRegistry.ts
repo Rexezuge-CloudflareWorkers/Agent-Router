@@ -1,6 +1,6 @@
-import { TimestampUtil } from '@agent-router/shared/utils';
+import { TimestampUtil } from '@rexezuge/shared';
 import { Tokens, createRequestScope } from '@agent-router/backend-services/composition';
-import { createLogger } from '@agent-router/backend-runtime/logger';
+import { createLogger } from '@rexezuge/runtime';
 import { ConfigurationManager } from '@agent-router/backend-runtime/config';
 import { BaseScheduledTask } from './IScheduledTask';
 import type { ScheduledTask } from './IScheduledTask';

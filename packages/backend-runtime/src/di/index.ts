@@ -1,5 +1,5 @@
-export { Container } from './Container';
-export type { Factory, Token } from './Container';
+export { Container } from '@rexezuge/runtime';
+export type { Factory, Token } from '@rexezuge/runtime';
 export { createServiceContext } from './ServiceContext';
 export type { ServiceContext, ServiceContextOverrides } from './ServiceContext';
 export { ConsoleLogger, SystemClock, NullLogger, FixedClock } from './ServiceContext';

@@ -2,7 +2,7 @@ import { Context, Next } from 'hono';
 import { Tokens, createRequestScope } from '@agent-router/backend-services/composition';
 import type { AccessIdentityContext } from '@agent-router/backend-services/auth';
 import { getRequestScope } from '@agent-router/backend-runtime/di';
-import { UnauthorizedError, ForbiddenError } from '@agent-router/backend-errors';
+import { UnauthorizedError, ForbiddenError } from '@rexezuge/errors';
 
 type RequestContext = Context<{
   Bindings: Env;

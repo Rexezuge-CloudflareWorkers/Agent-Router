@@ -1,4 +1,4 @@
-import { CryptoUtil } from '@agent-router/shared/utils';
+import { CryptoUtil } from '@rexezuge/shared';
 
 function toBytes(base64: string): Uint8Array {
   const binary = atob(base64);

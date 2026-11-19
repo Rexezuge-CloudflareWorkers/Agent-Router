@@ -1,12 +1,12 @@
 import type { Hono } from 'hono';
 import { Tokens, createRequestScope } from '@agent-router/backend-services/composition';
-import { ServiceError } from '@agent-router/backend-errors';
+import { ServiceError } from '@rexezuge/errors';
 
 type ProviderApp = Hono<{ Bindings: Env; Variables: { AuthenticatedUserEmailAddress: string } }>;
 
 function statusOf(error: unknown): 400 | 404 | 500 {
   if (error instanceof ServiceError) {
-    const code = error.getErrorCode();
+    const code = error.status;
     if (code === 400 || code === 404) return code;
   }
   return 500;

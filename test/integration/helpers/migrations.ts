@@ -1,10 +1,10 @@
 /**
- * Minimal SQL statement splitter for SQLite migration files.
- *
- * Handles: single/double/backtick quoted strings (incl. `''` escapes),
- * `--` line comments, `/* ... *\/` block comments. Semicolons inside strings
- * or comments do not split.
- */
+Minimal SQL statement splitter for SQLite migration files.
+
+Handles: single/double/backtick quoted strings (incl. `''` escapes),
+`--` line comments, `/* ... *\/` block comments. Semicolons inside strings
+or comments do not split.
+*/
 function splitSql(sql: string): string[] {
   const statements: string[] = [];
   let current = '';
@@ -88,8 +88,8 @@ export async function applyMigrations(db: D1Database): Promise<void> {
     if (stmt.length === 0) continue;
     // Skip pure-comment statements (no executable SQL).
     const withoutComments = stmt
-      .replace(/--[^\n]*/g, '')
-      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replaceAll(/--[^\n]*/g, '')
+      .replaceAll(/\/\*[\s\S]*?\*\//g, '')
       .trim();
     if (withoutComments.length === 0) continue;
     await db.prepare(stmt).run();

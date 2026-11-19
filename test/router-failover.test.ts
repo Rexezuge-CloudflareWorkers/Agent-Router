@@ -49,11 +49,12 @@ function makeService(keys: Array<ReturnType<typeof row>>, fetchImpl: typeof fetc
     markExhausted: async (id: string) => {
       events.push(`exhausted:${id}`);
     },
-    database: { prepare: () => ({ bind: () => ({ run: async () => undefined }) }) },
+    database: { prepare: () => ({ bind: () => ({ run: async () => {} }) }) },
   };
   const env = { DB: {} as never, PROVIDER_KEYS_ENCRYPTION_SECRET: { get: async () => MASTER } };
   const svc = new RouterService(env, {
-    providerDAO: () => Promise.resolve({ getById: async () => ({ id: 'p1', user_email: 'u@x.y', userEmail: 'u@x.y', status: 'active' }) } as never),
+    providerDAO: () =>
+      Promise.resolve({ getById: async () => ({ id: 'p1', user_email: 'u@x.y', userEmail: 'u@x.y', status: 'active' }) } as never),
     providerKeyDAO: () => Promise.resolve(keyDAO as never),
     usageDAO: () => Promise.resolve({ insert: async (r: Record<string, unknown>) => void usage.push(r) } as never),
     masterKey: async () => MASTER,
@@ -65,14 +66,16 @@ function makeService(keys: Array<ReturnType<typeof row>>, fetchImpl: typeof fetc
 }
 
 function jsonResponse(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+  return Response.json(body, { status, headers: { 'content-type': 'application/json' } });
 }
 
 describe('RouterService failover', () => {
   it('proxies with the first key and records usage tokens', async () => {
     const k1 = row('k1');
     k1.encrypted_key = await enc('sk-1');
-    const fetchImpl = vi.fn(async () => jsonResponse(200, { choices: [], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } }));
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(200, { choices: [], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } }),
+    );
     const { svc, events, usage } = makeService([k1], fetchImpl as unknown as typeof fetch);
     const result = await svc.proxy({
       userEmail: 'u@x.y',
@@ -208,7 +211,7 @@ describe('RouterService failover', () => {
     const controller = new AbortController();
     controller.abort();
     const commandCode = {
-      ensureInitialized: async () => undefined,
+      ensureInitialized: async () => {},
       call: async () => {
         throw new DOMException('The operation was aborted', 'AbortError');
       },

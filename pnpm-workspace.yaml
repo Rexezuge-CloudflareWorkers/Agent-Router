@@ -1,6 +1,9 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+  # The test suite is a workspace project so `pnpm -r typecheck` and `pnpm run lint`
+  # reach it, and so pnpm links the bare specifiers its files import.
+  - 'test'
 allowBuilds:
   esbuild: true
   sharp: true

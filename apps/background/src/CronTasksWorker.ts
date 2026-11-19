@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
-import { createLogger } from '@agent-router/backend-runtime/logger';
+import { createLogger } from '@rexezuge/runtime';
 import { runScheduledTasks } from './scheduled/TaskRegistry';
 
 const logger = createLogger('CronTasksWorker');

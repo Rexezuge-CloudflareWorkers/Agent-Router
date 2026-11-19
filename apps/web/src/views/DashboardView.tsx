@@ -1,9 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { AppPage } from '../components/layout/AppPage';
-import { PageHeaderCard } from '../components/layout/PageHeaderCard';
+import { AppPage, PageHeaderCard, ReadOnlyField } from '@rexezuge/web';
 import { Card, CardHeader, CardTitle } from '../components/ui/Card';
-import { ReadOnlyField } from '../components/shared/ReadOnlyField';
 
 export function DashboardView(_props: { showNotice: (type: 'success' | 'error', text: string) => void }) {
   const { t } = useTranslation();

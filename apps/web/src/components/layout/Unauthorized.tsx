@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { ZERO_TRUST_AUTHENTICATION_PATH } from '../../lib/constants';
 
 function authenticateWithZeroTrust() {
-  globalThis.location.assign(ZERO_TRUST_AUTHENTICATION_PATH);
+  location.assign(ZERO_TRUST_AUTHENTICATION_PATH);
 }
 
 export default function Unauthorized({ message }: { message?: string }) {

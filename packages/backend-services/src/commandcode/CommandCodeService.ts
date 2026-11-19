@@ -1,16 +1,20 @@
-import { BadRequestError } from '@agent-router/backend-errors';
-import type { D1Queryable } from '@agent-router/backend-data/utils';
+import { BadRequestError } from '@rexezuge/errors';
+import type { D1Queryable } from '@rexezuge/d1';
 import type { AppConfiguration } from '@agent-router/backend-runtime/config';
-import { TimestampUtil, UUIDUtil } from '@agent-router/shared/utils';
+import { TimestampUtil, UUIDUtil } from '@rexezuge/shared';
 import { CommandCodeKeyStateDAO } from '@agent-router/backend-data/dao';
-import { generateFingerprint, sha256Bytes, toHex } from './CommandCodeFingerprint';
-import { buildCommandCodeEnvelope, buildCommandCodeHeaders, resolveSessionId } from './CommandCodeWire';
+import { generateFingerprint, sha256Bytes, toHex } from '@agent-router/provider-clients/commandcode/CommandCodeFingerprint';
+import {
+  buildCommandCodeEnvelope,
+  buildCommandCodeHeaders,
+  resolveSessionId,
+} from '@agent-router/provider-clients/commandcode/CommandCodeWire';
 import { convertAnthropicToChat, convertResponsesToChat } from './CommandCodeConverters';
-import { CommandCodeAccumulator, mapCcError, parseLine } from './CommandCodeEvents';
+import { CommandCodeAccumulator, mapCcError, parseLine } from '@agent-router/provider-clients/commandcode/CommandCodeEvents';
 import { CommandCodeChatTranslator } from './CommandCodeChatTranslator';
 import { CommandCodeAnthropicTranslator } from './CommandCodeAnthropicTranslator';
 import { CommandCodeResponsesTranslator } from './CommandCodeResponsesTranslator';
-import { COMMAND_CODE_FALLBACK_MODELS, normalizeProviderModels } from './CommandCodeModels';
+import { COMMAND_CODE_FALLBACK_MODELS, normalizeProviderModels } from '@agent-router/provider-clients/commandcode/CommandCodeModels';
 import type { CommandCodeTranslator } from './CommandCodeTranslator';
 import type {
   CommandCodeCallResult,
@@ -18,7 +22,7 @@ import type {
   CommandCodeModel,
   CommandCodeResult,
   CommandCodeStreamResult,
-} from './CommandCodeTypes';
+} from '@agent-router/provider-clients/commandcode/CommandCodeTypes';
 
 interface CommandCodeServiceEnv {
   DB: D1Queryable;
@@ -148,9 +152,7 @@ class CommandCodeService {
       ]);
       if (!fingerprintResponse.ok || !lifecycleResponse.ok) return;
       const jitter = Math.floor(this.deps.random() * INIT_JITTER_MS);
-      await dao
-        .markInitialized(keyId, now + INIT_REFRESH_MS + jitter, TimestampUtil.getCurrentUnixTimestampInSeconds())
-        .catch(() => undefined);
+      await dao.markInitialized(keyId, now + INIT_REFRESH_MS + jitter, TimestampUtil.getCurrentUnixTimestampInSeconds()).catch(() => {});
     } catch {
       // Pre-requests are best-effort: the generation request still proceeds.
     }
@@ -383,7 +385,7 @@ class CommandCodeService {
       },
       cancel: () => {
         resolveUsage?.(this.usageOf(translator.accumulator));
-        void reader.cancel().catch(() => undefined);
+        void reader.cancel().catch(() => {});
       },
     });
 

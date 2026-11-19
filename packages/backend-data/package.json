@@ -7,16 +7,15 @@
   "exports": {
     ".": "./src/index.ts",
     "./dao": "./src/dao/index.ts",
-    "./dao/*": "./src/dao/*.ts",
-    "./utils": "./src/utils/index.ts",
-    "./utils/*": "./src/utils/*.ts"
+    "./dao/*": "./src/dao/*.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@agent-router/backend-errors": "workspace:*",
-    "@agent-router/shared": "workspace:*"
+    "@agent-router/shared": "workspace:*",
+    "@rexezuge/d1": "1.9.4",
+    "@rexezuge/errors": "1.9.4"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261110.1",

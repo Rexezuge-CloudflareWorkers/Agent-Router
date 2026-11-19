@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CodexOAuthClient } from '@agent-router/backend-services/codex';
-import { OAuth2TokenNonRetryableError, OAuth2TokenRetryableError } from '@agent-router/backend-errors';
+import { OAuth2TokenNonRetryableError, OAuth2TokenRetryableError } from '@rexezuge/errors';
 
 function jwtWithPayload(payload: Record<string, unknown>): string {
   const b64 = (v: string) => Buffer.from(v, 'utf8').toString('base64url');
@@ -8,7 +8,7 @@ function jwtWithPayload(payload: Record<string, unknown>): string {
 }
 
 function tokenFetchImpl(response: { status: number; body: unknown }) {
-  return vi.fn(async () => new Response(JSON.stringify(response.body), { status: response.status }));
+  return vi.fn(async (..._args: Parameters<typeof fetch>) => Response.json(response.body, { status: response.status }));
 }
 
 describe('CodexOAuthClient', () => {
@@ -21,7 +21,7 @@ describe('CodexOAuthClient', () => {
     expect(device.deviceAuthId).toBe('da-1');
     expect(device.userCode).toBe('WXYZ-9999');
     expect(device.pollIntervalSeconds).toBe(7);
-    expect(String(fetchImpl.mock.calls[0]?.[0])).toContain('/deviceauth/usercode');
+    expect(fetchImpl.mock.calls[0]?.[0] as unknown as string).toContain('/deviceauth/usercode');
     await expect(CodexOAuthClient.requestDeviceCode(tokenFetchImpl({ status: 200, body: {} }) as unknown as typeof fetch)).rejects.toThrow(
       /device code/i,
     );

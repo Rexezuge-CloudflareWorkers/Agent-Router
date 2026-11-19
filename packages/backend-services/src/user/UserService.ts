@@ -1,9 +1,9 @@
 import { UserDAO } from '@agent-router/backend-data/dao';
 import type { UserRow } from '@agent-router/backend-data/dao';
-import type { D1Queryable } from '@agent-router/backend-data/utils';
-import { BadRequestError, NotFoundError } from '@agent-router/backend-errors';
+import type { D1Queryable } from '@rexezuge/d1';
+import { BadRequestError, NotFoundError } from '@rexezuge/errors';
 import { isReservedNamespaceName } from '@agent-router/shared/constants';
-import { TimestampUtil } from '@agent-router/shared/utils';
+import { TimestampUtil } from '@rexezuge/shared';
 
 interface UserServiceEnv {
   DB: D1Queryable;

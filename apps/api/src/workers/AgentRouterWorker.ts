@@ -1,4 +1,4 @@
-import { AbstractEntrypointWorker } from '@agent-router/backend-runtime/base';
+import { AbstractEntrypointWorker } from '@rexezuge/runtime';
 import { fromHono } from 'chanfana';
 import type { HonoOpenAPIRouterType } from 'chanfana';
 import { Hono } from 'hono';
@@ -64,7 +64,9 @@ class AgentRouterWorker extends AbstractEntrypointWorker {
         path === '/providers' ||
         path === '/keys' ||
         path === '/usage' ||
-        path.startsWith('/user/') ? c.html(SPA_HTML) : c.notFound();
+        path.startsWith('/user/')
+        ? c.html(SPA_HTML)
+        : c.notFound();
     });
 
     this.app = openapi;

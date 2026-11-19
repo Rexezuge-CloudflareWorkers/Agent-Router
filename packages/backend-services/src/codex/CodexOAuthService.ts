@@ -1,11 +1,11 @@
 import { CodexDeviceSessionDAO, ProviderDAO, ProviderKeyDAO } from '@agent-router/backend-data/dao';
-import type { D1Queryable } from '@agent-router/backend-data/utils';
-import { BadRequestError, NotFoundError, OAuth2TokenNonRetryableError, OAuth2TokenRetryableError } from '@agent-router/backend-errors';
+import type { D1Queryable } from '@rexezuge/d1';
+import { BadRequestError, NotFoundError, OAuth2TokenNonRetryableError, OAuth2TokenRetryableError } from '@rexezuge/errors';
 import { AppConfiguration } from '@agent-router/backend-runtime/config';
 import type { ProviderKeyMetadata } from '@agent-router/shared';
-import { TimestampUtil, UUIDUtil } from '@agent-router/shared/utils';
+import { TimestampUtil, UUIDUtil } from '@rexezuge/shared';
 import { KeyCrypto } from '../provider/KeyCrypto';
-import { CodexOAuthClient } from './CodexOAuthClient';
+import { CodexOAuthClient } from '@agent-router/provider-clients/codex';
 
 interface CodexOAuthServiceEnv {
   DB: D1Queryable;
@@ -194,7 +194,7 @@ class CodexOAuthService {
     const now = TimestampUtil.getCurrentUnixTimestampInSeconds();
     const expiresAt = Math.floor(device.expiresAtMs / 1000);
     const sessionDAO = await this.deps.deviceSessionDAO();
-    await sessionDAO.deleteByKey(keyId).catch(() => undefined);
+    await sessionDAO.deleteByKey(keyId).catch(() => {});
     await sessionDAO.create({
       deviceAuthId: device.deviceAuthId,
       providerKeyId: keyId,
@@ -232,7 +232,7 @@ class CodexOAuthService {
       poll = await CodexOAuthClient.pollDeviceCode({ deviceAuthId: session.deviceAuthId, userCode: session.userCode }, this.deps.fetchImpl);
     } catch (error) {
       if (error instanceof OAuth2TokenRetryableError) return pending;
-      await sessionDAO.consume(session.deviceAuthId, now).catch(() => undefined);
+      await sessionDAO.consume(session.deviceAuthId, now).catch(() => {});
       return { status: 'failed', message: error instanceof Error ? error.message : 'Codex authorization failed.' };
     }
     if (poll.status === 'pending') return pending;
@@ -256,10 +256,10 @@ class CodexOAuthService {
       });
     } catch (error) {
       if (error instanceof OAuth2TokenRetryableError) return pending;
-      await sessionDAO.consume(session.deviceAuthId, now).catch(() => undefined);
+      await sessionDAO.consume(session.deviceAuthId, now).catch(() => {});
       return { status: 'failed', message: error instanceof Error ? error.message : 'Codex authorization failed.' };
     }
-    await sessionDAO.consume(session.deviceAuthId, now).catch(() => undefined);
+    await sessionDAO.consume(session.deviceAuthId, now).catch(() => {});
     const updated = await keyDAO.getMetadataById(keyId);
     return { status: 'connected', accountId: updated?.codexAccountId ?? null };
   }
@@ -303,7 +303,7 @@ class CodexOAuthService {
       now,
     });
     const sessionDAO = await this.deps.deviceSessionDAO();
-    await sessionDAO.deleteByKey(keyId).catch(() => undefined);
+    await sessionDAO.deleteByKey(keyId).catch(() => {});
     const updated = await keyDAO.getMetadataById(keyId);
     if (!updated) throw new NotFoundError('Provider key not found');
     return updated;
@@ -325,7 +325,7 @@ class CodexOAuthService {
     const now = TimestampUtil.getCurrentUnixTimestampInSeconds();
     await keyDAO.clearOAuth(keyId, now);
     const sessionDAO = await this.deps.deviceSessionDAO();
-    await sessionDAO.deleteByKey(keyId).catch(() => undefined);
+    await sessionDAO.deleteByKey(keyId).catch(() => {});
     const updated = await keyDAO.getMetadataById(keyId);
     if (!updated) throw new NotFoundError('Provider key not found');
     return updated;

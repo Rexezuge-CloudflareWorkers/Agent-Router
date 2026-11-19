@@ -1,5 +1,5 @@
 import { BaseDAO } from './BaseDAO';
-import type { D1Queryable } from '../utils/D1Types';
+import type { D1Queryable } from '@rexezuge/d1';
 import type { GatewayKeyMetadata } from '@agent-router/shared';
 
 export interface GatewayKeyRow {
@@ -32,8 +32,16 @@ class GatewayKeyDAO extends BaseDAO {
     super(database);
   }
 
-  public async create(row: { keyId: string; userEmail: string; keyHash: string; keyPrefix: string; name: string; expiresAt: number; now: number }): Promise<void> {
-    await this.withRetry(
+  public async create(row: {
+    keyId: string;
+    userEmail: string;
+    keyHash: string;
+    keyPrefix: string;
+    name: string;
+    expiresAt: number;
+    now: number;
+  }): Promise<void> {
+    await this.run(
       () =>
         this.database
           .prepare(
@@ -69,12 +77,19 @@ class GatewayKeyDAO extends BaseDAO {
   }
 
   public async touchLastUsed(keyHash: string, now: number): Promise<void> {
-    await this.withRetry(() => this.database.prepare('UPDATE gateway_keys SET last_used_at = ? WHERE key_hash = ?').bind(now, keyHash).run(), 'touch gateway key');
+    await this.run(
+      () => this.database.prepare('UPDATE gateway_keys SET last_used_at = ? WHERE key_hash = ?').bind(now, keyHash).run(),
+      'touch gateway key',
+    );
   }
 
   public async revoke(keyId: string, userEmail: string): Promise<void> {
-    await this.withRetry(
-      () => this.database.prepare(`UPDATE gateway_keys SET status = 'revoked' WHERE key_id = ? AND lower(user_email) = lower(?)`).bind(keyId, userEmail).run(),
+    await this.run(
+      () =>
+        this.database
+          .prepare(`UPDATE gateway_keys SET status = 'revoked' WHERE key_id = ? AND lower(user_email) = lower(?)`)
+          .bind(keyId, userEmail)
+          .run(),
       'revoke gateway key',
     );
   }

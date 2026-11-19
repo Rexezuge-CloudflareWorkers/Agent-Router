@@ -1,7 +1,7 @@
-import { CommandCodeAccumulator } from './CommandCodeEvents';
+import { CommandCodeAccumulator } from '@agent-router/provider-clients/commandcode/CommandCodeEvents';
 import { sse } from './CommandCodeTranslator';
 import type { CommandCodeTranslator } from './CommandCodeTranslator';
-import type { CommandCodeEvent, CommandCodeMappedError } from './CommandCodeTypes';
+import type { CommandCodeEvent, CommandCodeMappedError } from '@agent-router/provider-clients/commandcode/CommandCodeTypes';
 
 class CommandCodeResponsesTranslator implements CommandCodeTranslator {
   public readonly accumulator = new CommandCodeAccumulator();

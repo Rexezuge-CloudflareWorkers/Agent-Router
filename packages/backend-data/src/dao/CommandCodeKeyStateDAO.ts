@@ -1,5 +1,5 @@
 import { BaseDAO } from './BaseDAO';
-import type { D1Queryable } from '../utils/D1Types';
+import type { D1Queryable } from '@rexezuge/d1';
 
 export interface CommandCodeKeyStateRow {
   provider_key_id: string;
@@ -20,7 +20,7 @@ class CommandCodeKeyStateDAO extends BaseDAO {
   }
 
   public async markInitialized(providerKeyId: string, nextInitAt: number, now: number): Promise<void> {
-    await this.withRetry(
+    await this.run(
       () =>
         this.database
           .prepare(
