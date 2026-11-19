@@ -2,7 +2,7 @@ export type ProviderKind = 'OPENAI' | 'ANTHROPIC' | 'GEMINI' | 'OPENAI_COMPAT' |
 
 export type ProviderStatus = 'active' | 'disabled';
 
-export type ProviderKeyStatus = 'active' | 'cooling' | 'exhausted' | 'disabled';
+export type ProviderKeyStatus = 'active' | 'degraded' | 'cooling' | 'exhausted' | 'disabled';
 
 export type ProviderKeyAuthType = 'static' | 'codex_oauth';
 

@@ -33,7 +33,7 @@ export interface ProviderKey {
   usedRequests: number;
   resetAt: number | null;
   priority: number;
-  status: 'active' | 'cooling' | 'exhausted' | 'disabled';
+  status: 'active' | 'degraded' | 'cooling' | 'exhausted' | 'disabled';
   cooldownUntil: number | null;
   consecutiveFailures: number;
   lastUsedAt: number | null;

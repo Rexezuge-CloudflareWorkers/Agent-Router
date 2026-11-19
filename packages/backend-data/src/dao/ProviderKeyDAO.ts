@@ -128,12 +128,13 @@ class ProviderKeyDAO extends BaseDAO {
     return (result.results ?? []).map(toMetadata);
   }
 
-  public async listActiveByProvider(providerId: string, now: number): Promise<ProviderKeyRow[]> {
+  public async listSelectableByProvider(providerId: string, now: number): Promise<ProviderKeyRow[]> {
     const result = await this.database
       .prepare(
         `SELECT * FROM provider_keys WHERE provider_id = ?
-         AND status = 'active' AND (cooldown_until IS NULL OR cooldown_until <= ?)
-         ORDER BY priority ASC, last_used_at ASC NULLS FIRST, created_at ASC`,
+         AND status IN ('active', 'degraded') AND (cooldown_until IS NULL OR cooldown_until <= ?)
+         ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END,
+                  priority ASC, last_used_at ASC NULLS FIRST, created_at ASC`,
       )
       .bind(providerId, now)
       .all<ProviderKeyRow>();
@@ -188,7 +189,9 @@ class ProviderKeyDAO extends BaseDAO {
         this.database
           .prepare(
             `UPDATE provider_keys SET used_tokens = used_tokens + ?, used_requests = used_requests + 1,
-             consecutive_failures = 0, last_used_at = ?, last_error = NULL, updated_at = ? WHERE id = ?`,
+             consecutive_failures = 0, cooldown_until = NULL,
+             status = CASE WHEN status = 'disabled' THEN 'disabled' ELSE 'active' END,
+             last_used_at = ?, last_error = NULL, updated_at = ? WHERE id = ?`,
           )
           .bind(total, now, now, id)
           .run(),
@@ -207,6 +210,20 @@ class ProviderKeyDAO extends BaseDAO {
           .bind(cooldownUntil, error.slice(0, 500), now, now, id)
           .run(),
       'record key failure',
+    );
+  }
+
+  public async markDegraded(id: string, error: string, now: number): Promise<void> {
+    await this.run(
+      () =>
+        this.database
+          .prepare(
+            `UPDATE provider_keys SET status = CASE WHEN status = 'disabled' THEN 'disabled' ELSE 'degraded' END,
+             cooldown_until = NULL, consecutive_failures = 0, last_error = ?, last_used_at = ?, updated_at = ? WHERE id = ?`,
+          )
+          .bind(error.slice(0, 500), now, now, id)
+          .run(),
+      'mark key degraded',
     );
   }
 
