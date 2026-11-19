@@ -31,7 +31,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LOCK_NAME, verifyMigrations } from './verify-migrations.ts';
 
-const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const migrationsDir = process.argv[2] === undefined ? path.join(REPOSITORY_ROOT, 'migrations') : path.resolve(process.argv[2]);
 
 const report = verifyMigrations(migrationsDir, { write: true });

@@ -22,7 +22,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ensureSpaShellStub } from './spa-shell.ts';
 
-const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const root = process.argv[2] === undefined ? REPOSITORY_ROOT : path.resolve(process.argv[2]);
 
 const result = ensureSpaShellStub({ root });
