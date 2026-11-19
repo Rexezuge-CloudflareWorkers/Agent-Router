@@ -237,7 +237,7 @@ class RouterService {
 
     const keyDAO = await this.deps.providerKeyDAO();
     const now = TimestampUtil.getCurrentUnixTimestampInSeconds();
-    const candidates = await keyDAO.listActiveByProvider(req.providerId, now);
+    const candidates = await keyDAO.listSelectableByProvider(req.providerId, now);
     const usable = candidates.filter((k) => !this.isCapExceeded(k) && (!this.isOAuthKey(k) || this.isOAuthUsable(k)));
     const capped = candidates.filter((k) => this.isCapExceeded(k));
     const oauthBlocked = candidates.filter((k) => !this.isCapExceeded(k) && this.isOAuthKey(k) && !this.isOAuthUsable(k));
@@ -282,14 +282,27 @@ class RouterService {
             lastStatus = response.status;
             lastError = response.message;
             if (response.retryable) {
-              const failures = candidate.consecutive_failures + 1;
-              const cooldownUntil =
-                failures >= disableAfter
-                  ? null
-                  : TimestampUtil.getCurrentUnixTimestampInSeconds() + Math.ceil(cooldownForFailures(cooldownBase, failures) / 1000);
-              await keyDAO
-                .recordFailure(candidate.id, `Upstream ${response.status}`, cooldownUntil, TimestampUtil.getCurrentUnixTimestampInSeconds())
-                .catch(() => {});
+              if (response.status === 429) {
+                // Rate limits are temporary: keep the key as a last-resort
+                // fallback instead of counting it toward auto-disable.
+                await keyDAO
+                  .markDegraded(candidate.id, `Upstream ${response.status}`, TimestampUtil.getCurrentUnixTimestampInSeconds())
+                  .catch(() => {});
+              } else {
+                const failures = candidate.consecutive_failures + 1;
+                const cooldownUntil =
+                  failures >= disableAfter
+                    ? null
+                    : TimestampUtil.getCurrentUnixTimestampInSeconds() + Math.ceil(cooldownForFailures(cooldownBase, failures) / 1000);
+                await keyDAO
+                  .recordFailure(
+                    candidate.id,
+                    `Upstream ${response.status}`,
+                    cooldownUntil,
+                    TimestampUtil.getCurrentUnixTimestampInSeconds(),
+                  )
+                  .catch(() => {});
+              }
               await usageDAO
                 .insert({
                   id: UUIDUtil.getRandomUUID(),
@@ -430,22 +443,30 @@ class RouterService {
         lastStatus = upstream.status;
         lastError = bodyText.slice(0, 300) || `Upstream error ${upstream.status}`;
         if (isRetryableStatus(upstream.status)) {
-          const failures = candidate.consecutive_failures + 1;
-          const cooldownUntil =
-            failures >= disableAfter
-              ? null
-              : TimestampUtil.getCurrentUnixTimestampInSeconds() + Math.ceil(cooldownForFailures(cooldownBase, failures) / 1000);
-          await keyDAO
-            .recordFailure(candidate.id, `Upstream ${upstream.status}`, cooldownUntil, TimestampUtil.getCurrentUnixTimestampInSeconds())
-            .catch(() => {});
-          if (failures >= disableAfter) {
-            const db = (keyDAO as unknown as { database: { prepare(q: string): { bind(...v: unknown[]): { run(): Promise<unknown> } } } })
-              .database;
-            await db
-              .prepare(`UPDATE provider_keys SET status = 'disabled', updated_at = ? WHERE id = ?`)
-              .bind(TimestampUtil.getCurrentUnixTimestampInSeconds(), candidate.id)
-              .run()
+          if (upstream.status === 429) {
+            // Rate limits are temporary: keep the key as a last-resort
+            // fallback instead of counting it toward auto-disable.
+            await keyDAO
+              .markDegraded(candidate.id, `Upstream ${upstream.status}`, TimestampUtil.getCurrentUnixTimestampInSeconds())
               .catch(() => {});
+          } else {
+            const failures = candidate.consecutive_failures + 1;
+            const cooldownUntil =
+              failures >= disableAfter
+                ? null
+                : TimestampUtil.getCurrentUnixTimestampInSeconds() + Math.ceil(cooldownForFailures(cooldownBase, failures) / 1000);
+            await keyDAO
+              .recordFailure(candidate.id, `Upstream ${upstream.status}`, cooldownUntil, TimestampUtil.getCurrentUnixTimestampInSeconds())
+              .catch(() => {});
+            if (failures >= disableAfter) {
+              const db = (keyDAO as unknown as { database: { prepare(q: string): { bind(...v: unknown[]): { run(): Promise<unknown> } } } })
+                .database;
+              await db
+                .prepare(`UPDATE provider_keys SET status = 'disabled', updated_at = ? WHERE id = ?`)
+                .bind(TimestampUtil.getCurrentUnixTimestampInSeconds(), candidate.id)
+                .run()
+                .catch(() => {});
+            }
           }
           await usageDAO
             .insert({

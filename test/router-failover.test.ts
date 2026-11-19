@@ -38,13 +38,16 @@ function makeService(keys: Array<ReturnType<typeof row>>, fetchImpl: typeof fetc
   const events: string[] = [];
   const usage: Array<Record<string, unknown>> = [];
   const keyDAO = {
-    listActiveByProvider: async () => keys,
+    listSelectableByProvider: async () => keys,
     getById: async (id: string) => keys.find((k) => k.id === id) ?? null,
     recordSuccess: async (id: string) => {
       events.push(`success:${id}`);
     },
     recordFailure: async (id: string) => {
       events.push(`failure:${id}`);
+    },
+    markDegraded: async (id: string) => {
+      events.push(`degraded:${id}`);
     },
     markExhausted: async (id: string) => {
       events.push(`exhausted:${id}`);
@@ -118,7 +121,35 @@ describe('RouterService failover', () => {
       bodyBytes: 100,
     });
     expect(result.providerKeyId).toBe('k2');
-    expect(events).toContain('failure:k1');
+    expect(events).toContain('degraded:k1');
+    expect(events).not.toContain('failure:k1');
+    expect(events).toContain('success:k2');
+  });
+
+  it('uses degraded keys only after active keys are exhausted', async () => {
+    const k1 = row('k1', { priority: 0 });
+    const k2 = row('k2', { priority: 1, status: 'degraded' });
+    k1.encrypted_key = await enc('sk-1');
+    k2.encrypted_key = await enc('sk-2');
+    const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const auth = (init?.headers as Record<string, string>)?.authorization ?? '';
+      if (auth.includes('sk-1')) return jsonResponse(429, { error: { message: 'Rate limited' } });
+      return jsonResponse(200, { choices: [], usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 } });
+    });
+    const { svc, events } = makeService([k1, k2], fetchImpl as unknown as typeof fetch);
+    const result = await svc.proxy({
+      userEmail: 'u@x.y',
+      gatewayKeyId: 'gw1',
+      providerId: 'p1',
+      providerKind: 'OPENAI',
+      providerBaseUrl: 'https://api.openai.com/v1',
+      upstreamPath: '/chat/completions',
+      upstreamBody: { model: 'gpt-4o', messages: [] },
+      upstreamModel: 'gpt-4o',
+      bodyBytes: 100,
+    });
+    expect(result.providerKeyId).toBe('k2');
+    expect(events).toContain('degraded:k1');
     expect(events).toContain('success:k2');
   });
 

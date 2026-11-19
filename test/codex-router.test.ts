@@ -48,10 +48,11 @@ function makeService(
 ) {
   const events: string[] = [];
   const keyDAO = {
-    listActiveByProvider: async () => keys,
+    listSelectableByProvider: async () => keys,
     getById: async (id: string) => keys.find((k) => k.id === id) ?? null,
     recordSuccess: async (id: string) => void events.push(`success:${id}`),
     recordFailure: async (id: string) => void events.push(`failure:${id}`),
+    markDegraded: async (id: string) => void events.push(`degraded:${id}`),
     markExhausted: async (id: string) => void events.push(`exhausted:${id}`),
     database: { prepare: () => ({ bind: () => ({ run: async () => {} }) }) },
   };
