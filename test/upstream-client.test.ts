@@ -108,6 +108,19 @@ describe('UpstreamClient', () => {
     expect(extractHtmlPageText(html)).toBe('Just a moment Verify you are human');
   });
 
+  it('drops script and style bodies whose end tags contain whitespace', () => {
+    const html = [
+      '<html><head><style >body{color:red}</style\n></head><body>',
+      '<script>alert(1)</script ><p>Just a moment</p>',
+      '</body></html>',
+    ].join('');
+    expect(extractHtmlPageText(html)).toBe('Just a moment');
+  });
+
+  it('does not treat script-like tag names as script blocks', () => {
+    expect(extractHtmlPageText('<scriptx>keep me</scriptx>')).toBe('keep me');
+  });
+
   it('parses Codex usage from input/output tokens', () => {
     expect(parseUsage('OPENAI_CODEX', { usage: { input_tokens: 12, output_tokens: 44, total_tokens: 56 } })).toMatchObject({
       promptTokens: 12,

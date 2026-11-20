@@ -30,8 +30,8 @@ Script/style content is dropped so the result is page copy, not CSS.
 */
 function extractHtmlPageText(html: string): string {
   return html
-    .replaceAll(/<script[^<>]*>[\s\S]*?<\/script>/gi, ' ')
-    .replaceAll(/<style[^<>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replaceAll(/<script\b[^<>]*>[\s\S]*?<\/script\s*>/gi, ' ')
+    .replaceAll(/<style\b[^<>]*>[\s\S]*?<\/style\s*>/gi, ' ')
     .replaceAll(/<[^<>]*>/g, ' ')
     .replaceAll(/\s+/g, ' ')
     .trim()
