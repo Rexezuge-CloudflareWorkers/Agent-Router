@@ -37,6 +37,28 @@ export function firstLine(message: string): string {
   return message.split('\n', 1)[0] ?? message;
 }
 
+const compactNumber = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
+
+export function formatCompactNumber(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '0';
+  return compactNumber.format(value);
+}
+
+export function formatDateTime(timestampSeconds: number | null | undefined, lng?: string | null): string {
+  if (timestampSeconds === null || timestampSeconds === undefined) return '—';
+  return new Date(timestampSeconds * 1000).toLocaleString(resolveLocale(lng), {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+export function formatLatency(ms: number | null | undefined): string {
+  if (ms === null || ms === undefined) return '—';
+  return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`;
+}
+
 export function formatBytes(bytes: number | null | undefined): string {
   if (bytes === null || bytes === undefined) return '0 B';
   if (bytes < 1024) return `${bytes} B`;

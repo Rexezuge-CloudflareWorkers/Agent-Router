@@ -3,8 +3,8 @@ import { useTranslation } from 'react-i18next';
 import type { CurrentUser } from '../../types';
 import { renameCurrentUsername, loadCurrentUser } from '../../services/userService';
 import { Button } from '../ui/Button';
-import { Card, CardHeader, CardTitle } from '../ui/Card';
-import { Input, Label } from '../ui/Input';
+import { Card, CardDescription, CardHeader, CardTitle } from '../ui/Card';
+import { Field, Input } from '../ui/Input';
 
 export function ProfileSettingsCard({
   user,
@@ -30,7 +30,7 @@ export function ProfileSettingsCard({
       const updated = await renameCurrentUsername(trimmedUsername);
       setUser(updated);
       setNewUsername(updated.username ?? '');
-      showNotice('success', t('settings.settingsUpdated', 'Profile Settings Updated.'));
+      showNotice('success', t('settings.settingsUpdated', 'Profile settings updated.'));
     } catch (error) {
       try {
         const current = await loadCurrentUser();
@@ -43,10 +43,10 @@ export function ProfileSettingsCard({
       showNotice(
         'error',
         message.toLowerCase().includes('reserved')
-          ? t('settings.usernameReserved', 'This Name Is Reserved For System Use.')
+          ? t('settings.usernameReserved', 'This name is reserved for system use.')
           : error instanceof Error
             ? error.message
-            : t('settings.failedToUpdate', 'Failed To Update Profile.'),
+            : t('settings.failedToUpdate', 'Failed to update profile.'),
       );
     } finally {
       setSaving(false);
@@ -56,17 +56,27 @@ export function ProfileSettingsCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{t('settings.profile', 'Profile')}</CardTitle>
+        <div>
+          <CardTitle>{t('settings.profile', 'Profile')}</CardTitle>
+          <CardDescription>{t('settings.profileDescription', 'How you appear across the gateway.')}</CardDescription>
+        </div>
       </CardHeader>
-      <dl className="space-y-2 text-sm mb-4">
-        <div className="flex gap-2">
-          <dt className="text-[var(--color-text-muted)] w-20 shrink-0">{t('settings.email', 'Email')}</dt>
-          <dd className="text-[var(--color-text-primary)] truncate">{user.email}</dd>
+      <dl className="mb-5 space-y-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-base)] px-3 py-2.5 text-sm">
+        <div className="flex items-center justify-between gap-3">
+          <dt className="text-[var(--color-text-muted)]">{t('settings.email', 'Email')}</dt>
+          <dd className="truncate text-[var(--color-text-primary)]">{user.email}</dd>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <dt className="text-[var(--color-text-muted)]">{t('settings.username', 'Username')}</dt>
+          <dd className="truncate font-mono text-[var(--color-text-primary)]">{user.username ?? '—'}</dd>
         </div>
       </dl>
       <form onSubmit={submit} className="space-y-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="user-username">{t('settings.username', 'Username')}</Label>
+        <Field
+          label={t('settings.username', 'Username')}
+          htmlFor="user-username"
+          hint={t('settings.renameHint', 'This is your display name inside Agent-Router.')}
+        >
           <Input
             id="user-username"
             placeholder={t('settings.usernamePlaceholder', 'your-username')}
@@ -74,10 +84,7 @@ export function ProfileSettingsCard({
             maxLength={39}
             onChange={(e) => setNewUsername(e.target.value)}
           />
-          <p className="text-xs text-[var(--color-text-muted)]">
-            {t('settings.renameHint', 'Renaming Changes All Repository URLs Under Your Account.')}
-          </p>
-        </div>
+        </Field>
         <Button type="submit" variant="primary" size="sm" loading={saving} disabled={!dirtyUsername}>
           {t('common.saveChanges', 'Save Changes')}
         </Button>

@@ -1,20 +1,12 @@
-import { useMatch } from 'react-router-dom';
-import { Header } from './components/layout/Header';
+import { AppShell, AuthShell } from './components/layout/AppShell';
 import { NoticeBar } from './components/layout/NoticeBar';
 import { SpaViewRouter } from './components/layout/SpaViewRouter';
 import { useNotice } from './hooks/useNotice';
 import { useCurrentUser } from './hooks/useCurrentUser';
 import { useSpaLanguage } from './hooks/useSpaLanguage';
 
-function TopHeader({ userEmail, username }: { userEmail: string | null; username?: string | null }) {
-  // The marketing/global header is root-only: every other route renders a
-  // contextual `ContextBar` instead, so the top anchor never moves pages.
-  const isRootPage = useMatch('/') !== null;
-  return isRootPage ? <Header userEmail={userEmail} username={username} /> : null;
-}
-
 export default function SpaApp() {
-  const { notice, showNotice } = useNotice();
+  const { notice, showNotice, dismissNotice } = useNotice();
   const { user, setUser, authorized } = useCurrentUser();
   const { language, languageStatus, languagePending, handleLanguageChange } = useSpaLanguage({
     user,
@@ -25,21 +17,23 @@ export default function SpaApp() {
   const ownerFromEmail = user ? user.email.split('@', 1)[0] : '';
   const defaultOwner = user?.username?.trim() ? user.username : ownerFromEmail;
 
+  const router = (
+    <SpaViewRouter
+      user={user}
+      setUser={setUser}
+      authorized={authorized}
+      showNotice={showNotice}
+      defaultOwner={defaultOwner}
+      language={languageStatus === 'error' ? 'unknown' : language}
+      onLanguageChange={handleLanguageChange}
+      languageDisabled={languagePending || languageStatus !== 'ready'}
+    />
+  );
+
   return (
     <div className="min-h-screen bg-[var(--color-surface-base)] text-[var(--color-text-primary)]">
-      <TopHeader userEmail={user?.email ?? null} username={user?.username ?? null} />
-      {notice && <NoticeBar notice={notice} />}
-
-      <SpaViewRouter
-        user={user}
-        setUser={setUser}
-        authorized={authorized}
-        showNotice={showNotice}
-        defaultOwner={defaultOwner}
-        language={languageStatus === 'error' ? 'unknown' : language}
-        onLanguageChange={handleLanguageChange}
-        languageDisabled={languagePending || languageStatus !== 'ready'}
-      />
+      {user ? <AppShell user={user}>{router}</AppShell> : <AuthShell showSignIn={authorized === false}>{router}</AuthShell>}
+      {notice && <NoticeBar notice={notice} onDismiss={dismissNotice} />}
     </div>
   );
 }

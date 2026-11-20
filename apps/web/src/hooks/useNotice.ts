@@ -10,14 +10,31 @@ export function useNotice() {
   const [notice, setNotice] = useState<Notice | null>(null);
   const timerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
 
-  const showNotice = useCallback((type: 'success' | 'error', text: string) => {
-    if (timerRef.current !== null) clearTimeout(timerRef.current);
-    setNotice({ type, text });
-    timerRef.current = setTimeout(() => {
-      setNotice(null);
-      timerRef.current = null;
-    }, NOTICE_TIMEOUT_MS);
+  const clearTimer = useCallback(() => {
+    if (timerRef.current === null) {
+      return;
+    }
+
+    clearTimeout(timerRef.current);
+    timerRef.current = null;
   }, []);
 
-  return { notice, showNotice };
+  const showNotice = useCallback(
+    (type: 'success' | 'error', text: string) => {
+      clearTimer();
+      setNotice({ type, text });
+      timerRef.current = setTimeout(() => {
+        setNotice(null);
+        timerRef.current = null;
+      }, NOTICE_TIMEOUT_MS);
+    },
+    [clearTimer],
+  );
+
+  const dismissNotice = useCallback(() => {
+    clearTimer();
+    setNotice(null);
+  }, [clearTimer]);
+
+  return { notice, showNotice, dismissNotice };
 }

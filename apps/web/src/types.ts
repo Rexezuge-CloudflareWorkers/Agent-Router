@@ -87,5 +87,8 @@ export interface UsageSummary {
   totalRequests: number;
   promptTokens: number;
   completionTokens: number;
+  failedRequests: number;
+  avgLatencyMs: number;
   byProvider: Array<{ providerId: string; totalTokens: number; totalRequests: number }>;
+  daily: Array<{ day: string; totalTokens: number; totalRequests: number }>;
 }

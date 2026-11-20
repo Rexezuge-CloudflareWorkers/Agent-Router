@@ -3,19 +3,29 @@ import { Loader2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors duration-150 disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]',
+  [
+    'inline-flex items-center justify-center gap-2 rounded-lg font-medium whitespace-nowrap',
+    'transition-[background-color,border-color,color,box-shadow] duration-150',
+    'disabled:opacity-50 disabled:pointer-events-none',
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-surface-base)]',
+  ],
   {
     variants: {
       variant: {
-        primary: 'bg-[var(--color-accent)] text-[#0d1008] hover:bg-[var(--color-accent-dim)]',
-        secondary: 'bg-[var(--color-surface-3)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-4)]',
+        primary: 'bg-[var(--color-accent)] text-white shadow-sm hover:bg-[var(--color-accent-dim)]',
+        secondary:
+          'bg-[var(--color-surface-3)] text-[var(--color-text-primary)] border border-[var(--color-border-muted)] hover:bg-[var(--color-surface-4)]',
         ghost: 'bg-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]',
-        danger: 'bg-[var(--color-error-bg)] text-[var(--color-error-text)] hover:brightness-125',
+        outline:
+          'bg-transparent text-[var(--color-text-primary)] border border-[var(--color-border-muted)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent-text)]',
+        danger: 'bg-[var(--color-error-bg)] text-[var(--color-error-text)] hover:bg-[#3a171a]',
       },
       size: {
-        sm: 'px-3 py-1.5 text-xs',
-        md: 'px-4 py-2',
-        lg: 'px-5 py-2.5 text-base',
+        xs: 'h-7 px-2 text-xs gap-1',
+        sm: 'h-8 px-3 text-xs',
+        md: 'h-9 px-4 text-sm',
+        lg: 'h-11 px-5 text-sm',
+        icon: 'h-8 w-8 p-0',
       },
     },
     defaultVariants: { variant: 'secondary', size: 'md' },
@@ -34,3 +44,5 @@ export function Button({ className, variant, size, loading, children, disabled, 
     </button>
   );
 }
+
+export { buttonVariants };

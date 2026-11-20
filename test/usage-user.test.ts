@@ -5,14 +5,25 @@ import { UserService } from '@agent-router/backend-services/user';
 describe('UsageService', () => {
   it('summarizes and lists ledger', async () => {
     const usageDAO = {
-      summarizeByUser: async () => ({ totalTokens: 100, totalRequests: 5, promptTokens: 60, completionTokens: 40 }),
+      summarizeByUser: async () => ({
+        totalTokens: 100,
+        totalRequests: 5,
+        promptTokens: 60,
+        completionTokens: 40,
+        failedRequests: 1,
+        avgLatencyMs: 250,
+      }),
       summarizeByProvider: async () => [{ providerId: 'p1', totalTokens: 100, totalRequests: 5 }],
+      summarizeDaily: async () => [{ day: new Date().toISOString().slice(0, 10), totalTokens: 100, totalRequests: 5 }],
       listByUser: async () => ({ rows: [], nextCursor: null }),
       pruneOlderThan: async () => 3,
     };
     const svc = new UsageService({ DB: {} as never }, { usageDAO: () => Promise.resolve(usageDAO as never) });
     const summary = await svc.getSummary('u@x.y', 30);
     expect(summary.totalTokens).toBe(100);
+    expect(summary.failedRequests).toBe(1);
+    expect(summary.daily).toHaveLength(30);
+    expect(summary.daily.at(-1)?.totalTokens).toBeGreaterThan(0);
     expect(await svc.pruneOlderThan(1, 10)).toBe(3);
   });
 });
