@@ -74,6 +74,8 @@ export function GatewayKeysView({ showNotice }: { showNotice: (type: 'success' |
     }
   };
 
+  const activeKeys = keys.filter((key) => key.status === 'active');
+
   return (
     <AppPage>
       <PageHeader
@@ -117,14 +119,14 @@ export function GatewayKeysView({ showNotice }: { showNotice: (type: 'success' |
         <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] px-5 py-4">
           <div>
             <h2 className="text-base font-semibold text-[var(--color-text-primary)]">{t('keys.active', 'Active Keys')}</h2>
-            <p className="text-xs text-[var(--color-text-muted)]">{t('keys.count', '{{count}} keys', { count: keys.length })}</p>
+            <p className="text-xs text-[var(--color-text-muted)]">{t('keys.count', '{{count}} keys', { count: activeKeys.length })}</p>
           </div>
-          <Badge variant="accent">{keys.length}</Badge>
+          <Badge variant="accent">{activeKeys.length}</Badge>
         </div>
         <div className="p-5">
           {loading ? (
             <SkeletonRows rows={4} />
-          ) : keys.length === 0 ? (
+          ) : activeKeys.length === 0 ? (
             <EmptyState
               icon={<KeyRound className="h-5 w-5" />}
               title={t('keys.noKeys', 'No gateway keys yet')}
@@ -149,7 +151,7 @@ export function GatewayKeysView({ showNotice }: { showNotice: (type: 'success' |
                 </TR>
               </THead>
               <TBody>
-                {keys.map((key) => (
+                {activeKeys.map((key) => (
                   <TR key={key.keyId}>
                     <TD className="font-medium text-[var(--color-text-primary)]">{key.name}</TD>
                     <TD>
@@ -163,9 +165,11 @@ export function GatewayKeysView({ showNotice }: { showNotice: (type: 'success' |
                     <TD className="whitespace-nowrap text-xs">{formatExpiryTimestamp(key.expiresAt)}</TD>
                     <TD className="whitespace-nowrap text-xs">{formatTimestamp(key.lastUsedAt)}</TD>
                     <TD align="right">
-                      <Button variant="ghost" size="sm" className="text-[var(--color-error-text)]" onClick={() => setPendingRevoke(key)}>
-                        {t('common.revoke', 'Revoke')}
-                      </Button>
+                      {key.status === 'active' && (
+                        <Button variant="ghost" size="sm" className="text-[var(--color-error-text)]" onClick={() => setPendingRevoke(key)}>
+                          {t('common.revoke', 'Revoke')}
+                        </Button>
+                      )}
                     </TD>
                   </TR>
                 ))}
