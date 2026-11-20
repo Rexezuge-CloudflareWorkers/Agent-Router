@@ -1,23 +1,36 @@
 import { useEffect, useState } from 'react';
-import { AppPage, PageHeaderCard } from '@rexezuge/web';
-import { Card, CardHeader, CardTitle } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
-import { Badge } from '../components/ui/Badge';
+import { useTranslation } from 'react-i18next';
+import { CheckCircle2, KeyRound, Plus } from 'lucide-react';
 import type { CreatedGatewayKey, GatewayKey } from '../types';
 import { createGatewayKey, listGatewayKeys, revokeGatewayKey } from '../services/gatewayKeyService';
+import { AppPage, PageHeader } from '../components/layout/AppPage';
+import { EmptyState } from '../components/layout/PageState';
+import { Badge, StatusBadge } from '../components/ui/Badge';
+import { Button } from '../components/ui/Button';
+import { Card } from '../components/ui/Card';
+import { ConfirmDialog } from '../components/modals/ConfirmDeleteModal';
+import { ModalHeader, ModalShell } from '../components/modals/ModalShell';
+import { Field, Input } from '../components/ui/Input';
+import { SkeletonRows } from '../components/ui/Skeleton';
+import { Table, TBody, TD, TH, THead, TR } from '../components/ui/Table';
+import { CopyButton } from '../components/shared/CopyButton';
+import { formatExpiryTimestamp, formatTimestamp } from '../lib/format';
 
 export function GatewayKeysView({ showNotice }: { showNotice: (type: 'success' | 'error', text: string) => void }) {
+  const { t } = useTranslation();
   const [keys, setKeys] = useState<GatewayKey[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [minting, setMinting] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [name, setName] = useState('');
   const [created, setCreated] = useState<CreatedGatewayKey | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [pendingRevoke, setPendingRevoke] = useState<GatewayKey | null>(null);
 
   const reload = async () => {
     try {
       setKeys(await listGatewayKeys());
     } catch (error) {
-      showNotice('error', error instanceof Error ? error.message : 'Failed To Load Keys.');
+      showNotice('error', error instanceof Error ? error.message : t('keys.loadFailed', 'Failed to load keys.'));
     } finally {
       setLoading(false);
     }
@@ -31,87 +44,180 @@ export function GatewayKeysView({ showNotice }: { showNotice: (type: 'success' |
 
   const onCreate = async () => {
     if (!name.trim()) {
-      showNotice('error', 'Key Name Is Required.');
+      showNotice('error', t('keys.nameRequired', 'Key name is required.'));
       return;
     }
+    setMinting(true);
     try {
       const result = await createGatewayKey(name.trim());
       setCreated(result);
       setName('');
-      showNotice('success', 'Gateway Key Created. Copy It Now.');
+      setDialogOpen(false);
+      showNotice('success', t('keys.created', 'Gateway key created. Copy it now.'));
       await reload();
     } catch (error) {
-      showNotice('error', error instanceof Error ? error.message : 'Failed To Create Key.');
+      showNotice('error', error instanceof Error ? error.message : t('keys.createFailed', 'Failed to create key.'));
+    } finally {
+      setMinting(false);
+    }
+  };
+
+  const onRevoke = async () => {
+    if (!pendingRevoke) return;
+    try {
+      await revokeGatewayKey(pendingRevoke.keyId);
+      setPendingRevoke(null);
+      showNotice('success', t('keys.revoked', 'Gateway key revoked.'));
+      await reload();
+    } catch (error) {
+      showNotice('error', error instanceof Error ? error.message : t('keys.revokeFailed', 'Failed to revoke key.'));
     }
   };
 
   return (
     <AppPage>
-      <PageHeaderCard title="Gateway Keys" description="Bearer Keys For Your Clients. Use As Authorization: Bearer ar_…" />
+      <PageHeader
+        eyebrow={t('header.workspace', 'Workspace')}
+        title={t('keys.title', 'Gateway Keys')}
+        description={t('keys.description', 'Bearer keys for your clients. Use them as Authorization: Bearer ar_….')}
+        actions={
+          <Button variant="primary" size="md" onClick={() => setDialogOpen(true)}>
+            <Plus className="h-4 w-4" />
+            {t('keys.mint', 'Mint Key')}
+          </Button>
+        }
+      />
 
       {created && (
-        <Card>
-          <CardHeader>
-            <CardTitle>New Key (Copy Once)</CardTitle>
-          </CardHeader>
-          <p className="font-mono text-sm break-all rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] p-2">
-            {created.key}
-          </p>
-          <Button variant="secondary" size="sm" onClick={() => setCreated(null)}>
-            Dismiss
-          </Button>
+        <Card className="border-[var(--color-success-text)]/30 bg-[var(--color-success-bg)]/40">
+          <div className="flex items-start gap-3">
+            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-[var(--color-success-text)]" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-[var(--color-success-text)]">
+                {t('keys.copyOnce', 'Copy this key now — it is shown once.')}
+              </p>
+              <div className="mt-2 flex items-center gap-2">
+                <code className="min-w-0 flex-1 truncate rounded-md border border-[var(--color-border)] bg-[var(--color-surface-base)] px-3 py-1.5 font-mono text-xs text-[var(--color-text-primary)]">
+                  {created.key}
+                </code>
+                <CopyButton value={created.key} />
+              </div>
+              <p className="mt-2 text-xs text-[var(--color-text-muted)]">
+                {created.name} · {formatExpiryTimestamp(created.expiresAt)} · {created.prefix}…
+              </p>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setCreated(null)}>
+              {t('common.dismiss', 'Dismiss')}
+            </Button>
+          </div>
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>New Key</CardTitle>
-        </CardHeader>
-        <div className="flex gap-2">
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Key Name (e.g. Production App)"
-            aria-label="Key Name"
-          />
-          <Button variant="primary" size="sm" onClick={() => void onCreate()}>
-            Mint Key
-          </Button>
+      <Card className="p-0">
+        <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] px-5 py-4">
+          <div>
+            <h2 className="text-base font-semibold text-[var(--color-text-primary)]">{t('keys.active', 'Active Keys')}</h2>
+            <p className="text-xs text-[var(--color-text-muted)]">{t('keys.count', '{{count}} keys', { count: keys.length })}</p>
+          </div>
+          <Badge variant="accent">{keys.length}</Badge>
+        </div>
+        <div className="p-5">
+          {loading ? (
+            <SkeletonRows rows={4} />
+          ) : keys.length === 0 ? (
+            <EmptyState
+              icon={<KeyRound className="h-5 w-5" />}
+              title={t('keys.noKeys', 'No gateway keys yet')}
+              message={t('keys.noKeysDescription', 'Mint a key to authenticate your first client request.')}
+              action={
+                <Button variant="primary" size="sm" onClick={() => setDialogOpen(true)}>
+                  <Plus className="h-4 w-4" />
+                  {t('keys.mint', 'Mint Key')}
+                </Button>
+              }
+            />
+          ) : (
+            <Table>
+              <THead>
+                <TR>
+                  <TH>{t('keys.columnName', 'Name')}</TH>
+                  <TH>{t('keys.columnKey', 'Key')}</TH>
+                  <TH>{t('keys.columnStatus', 'Status')}</TH>
+                  <TH>{t('keys.columnExpires', 'Expires')}</TH>
+                  <TH>{t('keys.columnLastUsed', 'Last used')}</TH>
+                  <TH align="right">{t('keys.columnActions', 'Actions')}</TH>
+                </TR>
+              </THead>
+              <TBody>
+                {keys.map((key) => (
+                  <TR key={key.keyId}>
+                    <TD className="font-medium text-[var(--color-text-primary)]">{key.name}</TD>
+                    <TD>
+                      <code className="rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 font-mono text-xs text-[var(--color-text-secondary)]">
+                        {key.keyPrefix}…
+                      </code>
+                    </TD>
+                    <TD>
+                      <StatusBadge status={key.status} />
+                    </TD>
+                    <TD className="whitespace-nowrap text-xs">{formatExpiryTimestamp(key.expiresAt)}</TD>
+                    <TD className="whitespace-nowrap text-xs">{formatTimestamp(key.lastUsedAt)}</TD>
+                    <TD align="right">
+                      <Button variant="ghost" size="sm" className="text-[var(--color-error-text)]" onClick={() => setPendingRevoke(key)}>
+                        {t('common.revoke', 'Revoke')}
+                      </Button>
+                    </TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+          )}
         </div>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Active Keys</CardTitle>
-          <span className="text-sm text-[var(--color-text-muted)]">{keys.length}</span>
-        </CardHeader>
-        {loading ? (
-          <p className="text-sm text-[var(--color-text-secondary)]">Loading…</p>
-        ) : keys.length === 0 ? (
-          <p className="text-sm text-[var(--color-text-secondary)]">No Gateway Keys Yet.</p>
-        ) : (
-          <ul className="divide-y divide-[var(--color-border)]">
-            {keys.map((k) => (
-              <li key={k.keyId} className="py-2 flex items-center gap-2">
-                <span className="text-sm font-medium">{k.name}</span>
-                <Badge>{k.status}</Badge>
-                <span className="font-mono text-xs text-[var(--color-text-muted)]">{k.keyPrefix}…</span>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() =>
-                    void revokeGatewayKey(k.keyId)
-                      .then(() => reload())
-                      .catch((e: unknown) => showNotice('error', e instanceof Error ? e.message : 'Failed.'))
-                  }
-                >
-                  Revoke
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+      {dialogOpen && (
+        <ModalShell onClose={() => setDialogOpen(false)} widthClass="w-[calc(100vw-2rem)] max-w-md" ariaLabel={t('keys.mint', 'Mint Key')}>
+          <ModalHeader title={t('keys.mint', 'Mint Key')} onClose={() => setDialogOpen(false)} />
+          <div className="space-y-4 p-5">
+            <Field
+              label={t('keys.name', 'Key name')}
+              htmlFor="gateway-key-name"
+              hint={t('keys.nameHint', 'Use a label that identifies the client, e.g. “Production App”.')}
+            >
+              <Input
+                id="gateway-key-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={t('keys.namePlaceholder', 'Production App')}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void onCreate();
+                }}
+              />
+            </Field>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setDialogOpen(false)}>
+                {t('common.cancel', 'Cancel')}
+              </Button>
+              <Button variant="primary" size="sm" loading={minting} onClick={() => void onCreate()}>
+                {t('keys.mint', 'Mint Key')}
+              </Button>
+            </div>
+          </div>
+        </ModalShell>
+      )}
+
+      {pendingRevoke && (
+        <ConfirmDialog
+          title={t('keys.revokeTitle', 'Revoke key')}
+          description={t('keys.revokeDescription', 'Revoke “{{name}}”? Clients using it will stop working immediately.', {
+            name: pendingRevoke.name,
+          })}
+          confirmLabel={t('common.revoke', 'Revoke')}
+          onConfirm={() => void onRevoke()}
+          onCancel={() => setPendingRevoke(null)}
+        />
+      )}
     </AppPage>
   );
 }

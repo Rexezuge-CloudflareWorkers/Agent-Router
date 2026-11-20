@@ -123,21 +123,59 @@ class UsageLedgerDAO extends BaseDAO {
   public async summarizeByUser(
     userEmail: string,
     since: number,
-  ): Promise<{ totalTokens: number; totalRequests: number; promptTokens: number; completionTokens: number }> {
+  ): Promise<{
+    totalTokens: number;
+    totalRequests: number;
+    promptTokens: number;
+    completionTokens: number;
+    failedRequests: number;
+    avgLatencyMs: number;
+  }> {
     const row = await this.database
       .prepare(
-        `SELECT COALESCE(SUM(total_tokens),0) AS totalTokens, COUNT(*) AS totalRequests,
-                COALESCE(SUM(prompt_tokens),0) AS promptTokens, COALESCE(SUM(completion_tokens),0) AS completionTokens
-         FROM usage_ledger WHERE lower(user_email) = lower(?) AND created_at >= ? AND status_code < 400`,
+        `SELECT COALESCE(SUM(CASE WHEN status_code < 400 THEN total_tokens ELSE 0 END),0) AS totalTokens,
+                COALESCE(SUM(CASE WHEN status_code < 400 THEN 1 ELSE 0 END),0) AS totalRequests,
+                COALESCE(SUM(CASE WHEN status_code < 400 THEN prompt_tokens ELSE 0 END),0) AS promptTokens,
+                COALESCE(SUM(CASE WHEN status_code < 400 THEN completion_tokens ELSE 0 END),0) AS completionTokens,
+                COALESCE(SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END),0) AS failedRequests,
+                COALESCE(AVG(latency_ms),0) AS avgLatencyMs
+         FROM usage_ledger WHERE lower(user_email) = lower(?) AND created_at >= ?`,
       )
       .bind(userEmail, since)
-      .first<{ totalTokens: number; totalRequests: number; promptTokens: number; completionTokens: number }>();
+      .first<{
+        totalTokens: number;
+        totalRequests: number;
+        promptTokens: number;
+        completionTokens: number;
+        failedRequests: number;
+        avgLatencyMs: number;
+      }>();
     return {
       totalTokens: row?.totalTokens ?? 0,
       totalRequests: row?.totalRequests ?? 0,
       promptTokens: row?.promptTokens ?? 0,
       completionTokens: row?.completionTokens ?? 0,
+      failedRequests: row?.failedRequests ?? 0,
+      avgLatencyMs: Math.round(row?.avgLatencyMs ?? 0),
     };
+  }
+
+  public async summarizeDaily(
+    userEmail: string,
+    since: number,
+  ): Promise<Array<{ day: string; totalTokens: number; totalRequests: number }>> {
+    const result = await this.database
+      .prepare(
+        `SELECT date(created_at, 'unixepoch') AS day,
+                COALESCE(SUM(total_tokens),0) AS totalTokens,
+                COUNT(*) AS totalRequests
+         FROM usage_ledger
+         WHERE lower(user_email) = lower(?) AND created_at >= ? AND status_code < 400
+         GROUP BY day ORDER BY day ASC`,
+      )
+      .bind(userEmail, since)
+      .all<{ day: string; totalTokens: number; totalRequests: number }>();
+    return result.results ?? [];
   }
 
   public async summarizeByProvider(

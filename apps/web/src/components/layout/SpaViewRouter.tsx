@@ -1,15 +1,20 @@
+import { lazy, Suspense } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { Compass } from 'lucide-react';
 import type { CurrentUser } from '../../types';
 import Unauthorized from './Unauthorized';
-import { Card } from '../ui/Card';
-import { AppPage } from './AppPage';
+import { AppPage, PageHeader } from './AppPage';
+import { LoadingSpinner, EmptyState } from './PageState';
 import { LandingView } from '../../views/LandingView';
 import { DashboardView } from '../../views/DashboardView';
 import { ProvidersView } from '../../views/ProvidersView';
 import { GatewayKeysView } from '../../views/GatewayKeysView';
-import { UsageView } from '../../views/UsageView';
 import { SettingsView } from '../../views/SettingsView';
+
+// Recharts is the heaviest dependency in the SPA; keep it out of the initial
+// bundle by loading the usage dashboard on demand.
+const UsageView = lazy(() => import('../../views/UsageView').then((module) => ({ default: module.UsageView })));
 
 interface SpaViewRouterProps {
   user: CurrentUser | null;
@@ -26,7 +31,7 @@ function gated(user: CurrentUser | null, element: React.ReactNode): React.JSX.El
   if (user) return <>{element}</>;
   return (
     <AppPage>
-      <Unauthorized message="Sign In To Manage The Gateway." />
+      <Unauthorized />
     </AppPage>
   );
 }
@@ -35,8 +40,8 @@ function SpaViewRouter({ user, setUser, authorized, showNotice, language, onLang
   const { t } = useTranslation();
   if (authorized === null) {
     return (
-      <div className="min-h-screen bg-[var(--color-surface-base)] flex items-center justify-center">
-        <div className="h-10 w-10 rounded-full border-2 border-[var(--color-accent)] border-t-transparent animate-spin" />
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
       </div>
     );
   }
@@ -45,7 +50,15 @@ function SpaViewRouter({ user, setUser, authorized, showNotice, language, onLang
       <Route path="/" element={user ? <DashboardView showNotice={showNotice} /> : <LandingView />} />
       <Route path="/providers" element={gated(user, <ProvidersView showNotice={showNotice} />)} />
       <Route path="/keys" element={gated(user, <GatewayKeysView showNotice={showNotice} />)} />
-      <Route path="/usage" element={gated(user, <UsageView showNotice={showNotice} />)} />
+      <Route
+        path="/usage"
+        element={gated(
+          user,
+          <Suspense fallback={<LoadingSpinner />}>
+            <UsageView showNotice={showNotice} />
+          </Suspense>,
+        )}
+      />
       <Route
         path="/settings"
         element={
@@ -60,7 +73,7 @@ function SpaViewRouter({ user, setUser, authorized, showNotice, language, onLang
             />
           ) : (
             <AppPage>
-              <Unauthorized message={t('errors.signInToManage', 'Sign In To Manage Settings.')} />
+              <Unauthorized message={t('errors.signInToManage', 'Sign in to manage settings.')} />
             </AppPage>
           )
         }
@@ -69,12 +82,11 @@ function SpaViewRouter({ user, setUser, authorized, showNotice, language, onLang
         path="*"
         element={
           <AppPage>
-            <Card>
-              <h1 className="text-lg font-semibold text-[var(--color-text-primary)]">{t('errors.pageNotFound', 'Page Not Found')}</h1>
-              <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-                {t('errors.pageNotFoundDescription', 'The Page You Requested Does Not Exist.')}
-              </p>
-            </Card>
+            <PageHeader title={t('errors.pageNotFound', 'Page not found')} />
+            <EmptyState
+              icon={<Compass className="h-5 w-5" />}
+              message={t('errors.pageNotFoundDescription', 'The page you requested does not exist.')}
+            />
           </AppPage>
         }
       />

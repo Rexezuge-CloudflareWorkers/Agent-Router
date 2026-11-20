@@ -1,10 +1,8 @@
 import { useTranslation } from 'react-i18next';
-import { UserRound } from 'lucide-react';
 import type { CurrentUser } from '../types';
 import { LanguageSettingsCard } from '../components/settings/LanguageSettingsCard';
 import { ProfileSettingsCard } from '../components/settings/ProfileSettingsCard';
-import { AppPage, PageHeaderCard } from '@rexezuge/web';
-import { ContextBar } from '../components/layout/ContextBar';
+import { AppPage, PageHeader } from '../components/layout/AppPage';
 
 export function SettingsView({
   user,
@@ -23,25 +21,16 @@ export function SettingsView({
 }) {
   const { t } = useTranslation();
   return (
-    <div>
-      <ContextBar
-        crumb={
-          <span className="text-xl font-semibold text-[var(--color-text-primary)] truncate">
-            {t('settings.userSettings', 'User Settings')}
-          </span>
-        }
+    <AppPage>
+      <PageHeader
+        eyebrow={t('settings.eyebrow', 'Account')}
+        title={t('settings.userSettings', 'User Settings')}
+        description={t('settings.description', 'Manage your display name and interface language.')}
       />
-      <AppPage>
-        <PageHeaderCard
-          icon={<UserRound className="h-5 w-5 text-[var(--color-text-secondary)]" />}
-          title={t('settings.userSettings', 'User Settings')}
-          description={user.email}
-        />
-
+      <div className="grid gap-4 lg:grid-cols-2">
         <ProfileSettingsCard user={user} setUser={setUser} showNotice={showNotice} />
-
         <LanguageSettingsCard language={language} onLanguageChange={onLanguageChange} disabled={languageDisabled} />
-      </AppPage>
-    </div>
+      </div>
+    </AppPage>
   );
 }

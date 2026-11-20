@@ -1,14 +1,15 @@
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../../lib/utils';
 
-const badgeVariants = cva('inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium shrink-0', {
+const badgeVariants = cva('inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium leading-5 shrink-0 border', {
   variants: {
     variant: {
-      success: 'bg-[var(--color-success-bg)] text-[var(--color-success-text)]',
-      error: 'bg-[var(--color-error-bg)] text-[var(--color-error-text)]',
-      warning: 'bg-[var(--color-warning-bg)] text-[var(--color-warning-text)]',
-      info: 'bg-[var(--color-info-bg)] text-[var(--color-info-text)]',
-      neutral: 'bg-[var(--color-neutral-bg)] text-[var(--color-neutral-text)]',
+      success: 'bg-[var(--color-success-bg)] text-[var(--color-success-text)] border-[var(--color-success-text)]/15',
+      error: 'bg-[var(--color-error-bg)] text-[var(--color-error-text)] border-[var(--color-error-text)]/15',
+      warning: 'bg-[var(--color-warning-bg)] text-[var(--color-warning-text)] border-[var(--color-warning-text)]/15',
+      info: 'bg-[var(--color-info-bg)] text-[var(--color-info-text)] border-[var(--color-info-text)]/15',
+      neutral: 'bg-[var(--color-neutral-bg)] text-[var(--color-neutral-text)] border-[var(--color-border)]',
+      accent: 'bg-[var(--color-accent)]/12 text-[var(--color-accent-text)] border-[var(--color-accent)]/25',
     },
   },
   defaultVariants: { variant: 'neutral' },
@@ -19,20 +20,37 @@ export type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>['varia
 export function Badge({
   className,
   variant,
+  dot,
   children,
-}: { className?: string; children: React.ReactNode } & VariantProps<typeof badgeVariants>) {
-  return <span className={cn(badgeVariants({ variant }), className)}>{children}</span>;
+}: {
+  className?: string;
+  dot?: boolean;
+  children: React.ReactNode;
+} & VariantProps<typeof badgeVariants>) {
+  return (
+    <span className={cn(badgeVariants({ variant }), className)}>
+      {dot && <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />}
+      {children}
+    </span>
+  );
 }
 
-export function VisibilityBadge({ isPrivate }: { isPrivate: boolean }) {
-  return <Badge variant={isPrivate ? 'warning' : 'success'}>{isPrivate ? 'Private' : 'Public'}</Badge>;
-}
+const STATUS_VARIANTS: Record<string, BadgeVariant> = {
+  active: 'success',
+  connected: 'success',
+  degraded: 'warning',
+  cooling: 'info',
+  pending: 'warning',
+  exhausted: 'error',
+  expired: 'error',
+  revoked: 'neutral',
+  disabled: 'neutral',
+};
 
-export function IssueStatusBadge({ status }: { status: string }) {
-  return <Badge variant={status === 'open' ? 'success' : 'neutral'}>{status === 'open' ? 'Open' : 'Closed'}</Badge>;
-}
-
-export function PullStatusBadge({ status }: { status: string }) {
-  if (status === 'merged') return <Badge variant="info">Merged</Badge>;
-  return <Badge variant={status === 'open' ? 'success' : 'neutral'}>{status === 'open' ? 'Open' : 'Closed'}</Badge>;
+export function StatusBadge({ status, className }: { status: string; className?: string }) {
+  return (
+    <Badge variant={STATUS_VARIANTS[status] ?? 'neutral'} dot className={cn('capitalize', className)}>
+      {status}
+    </Badge>
+  );
 }
