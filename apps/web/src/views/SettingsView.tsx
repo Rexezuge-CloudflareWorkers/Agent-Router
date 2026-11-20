@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import type { CurrentUser } from '../types';
 import { LanguageSettingsCard } from '../components/settings/LanguageSettingsCard';
+import { PeakHoursSettingsCard } from '../components/settings/PeakHoursSettingsCard';
 import { ProfileSettingsCard } from '../components/settings/ProfileSettingsCard';
 import { AppPage, PageHeader } from '../components/layout/AppPage';
 
@@ -30,6 +31,7 @@ export function SettingsView({
       <div className="grid gap-4 lg:grid-cols-2">
         <ProfileSettingsCard user={user} setUser={setUser} showNotice={showNotice} />
         <LanguageSettingsCard language={language} onLanguageChange={onLanguageChange} disabled={languageDisabled} />
+        <PeakHoursSettingsCard showNotice={showNotice} />
       </div>
     </AppPage>
   );

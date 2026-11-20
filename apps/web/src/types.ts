@@ -4,6 +4,18 @@ export interface CurrentUser {
   preferredLanguage?: string | null;
 }
 
+export type PeakPreferenceMode = 'continue' | 'fallback' | 'reject';
+
+export interface PeakPreference {
+  mode: PeakPreferenceMode;
+  fallbackModel: string | null;
+}
+
+export interface PeakPreferenceStatus extends PeakPreference {
+  isPeak: boolean;
+  activeModelFamilies: string[];
+}
+
 export type ProviderKind = 'OPENAI' | 'ANTHROPIC' | 'GEMINI' | 'OPENAI_COMPAT' | 'OPENAI_CODEX' | 'COMMAND_CODE';
 
 export type ProviderKeyAuthType = 'static' | 'codex_oauth';

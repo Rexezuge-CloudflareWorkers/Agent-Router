@@ -230,7 +230,20 @@
     "language": "Language",
     "languageDescription": "Choose your preferred display language.",
     "selectLanguage": "Select Language",
-    "unknownLanguage": "Unknown"
+    "unknownLanguage": "Unknown",
+    "peakTitle": "Peak Hours",
+    "peakDescription": "Choose what happens when a model is in its peak window.",
+    "peakStatusNow": "Peak Now",
+    "peakStatusOff": "Off-Peak",
+    "peakSchedule": "DeepSeek · Mon–Fri · 09:00–12:00, 14:00–18:00 (UTC+8)",
+    "peakModeContinue": "Continue Using The Model",
+    "peakModeFallback": "Route To Another Model",
+    "peakModeReject": "Reject The Request",
+    "peakFallbackModel": "Fallback Model",
+    "peakFallbackHint": "Any model id the gateway can serve, e.g. moonshotai/Kimi-K2.5.",
+    "peakSaved": "Peak-hours preference saved.",
+    "peakSaveFailed": "Failed to save peak-hours preference.",
+    "peakLoadFailed": "Unable to load peak-hours settings."
   },
   "unauthorized": {
     "title": "Access Required",
