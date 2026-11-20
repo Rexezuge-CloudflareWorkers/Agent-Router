@@ -5,8 +5,15 @@ import type { ProxyIdentity } from '@agent-router/backend-services/proxy';
 
 const identity: ProxyIdentity = { userEmail: 'u@x.y', gatewayKeyId: 'gw-1' };
 
-function scopeWith(proxy: (input: Record<string, unknown>) => Promise<unknown>, provider?: Record<string, unknown>): never {
+const CONTINUE_PREFERENCE = { mode: 'continue', fallbackModel: null };
+
+function scopeWith(
+  proxy: (input: Record<string, unknown>) => Promise<unknown>,
+  provider?: Record<string, unknown>,
+  preference?: { mode: string; fallbackModel: string | null },
+): never {
   const resolvedProvider = provider ?? { id: 'p1', kind: 'OPENAI', status: 'active', baseUrl: null, name: 'p1' };
+  const resolvedPreference = preference ?? CONTINUE_PREFERENCE;
   return {
     get(token: unknown) {
       if (token === Tokens.AppConfig) {
@@ -17,6 +24,7 @@ function scopeWith(proxy: (input: Record<string, unknown>) => Promise<unknown>, 
       }
       if (token === Tokens.ProviderService) return { listProviders: async () => [resolvedProvider] };
       if (token === Tokens.RouterService) return { proxy };
+      if (token === Tokens.UserPeakPreferenceService) return { getPreference: async () => resolvedPreference };
       throw new Error('unexpected token');
     },
   } as never;
@@ -108,5 +116,58 @@ describe('proxy operations', () => {
     const input = proxy.mock.calls[0]?.[0] as unknown as Record<string, unknown>;
     expect(input.clientEndpoint).toBe('anthropic');
     expect(input.rawBodyText).toBe(body);
+  });
+
+  // Mon 10:00 Asia/Shanghai — inside DeepSeek's 09:00-12:00 peak window.
+  const PEAK_MONDAY = new Date('2026-01-05T02:00:00Z');
+
+  function deepseekScope(
+    proxy: (input: Record<string, unknown>) => Promise<unknown>,
+    preference: { mode: string; fallbackModel: string | null },
+  ) {
+    const commandCode = { id: 'p1', kind: 'COMMAND_CODE', status: 'active', baseUrl: null, name: 'p1' };
+    return scopeWith(proxy, commandCode, preference);
+  }
+
+  it('rejects a peak model during peak hours when the user prefers reject', async () => {
+    vi.useFakeTimers({ now: PEAK_MONDAY, toFake: ['Date'] });
+    try {
+      const proxy = vi.fn(async (_input: unknown) => ({
+        status: 200,
+        bodyText: '{}',
+        contentType: 'application/json',
+        providerKeyId: 'pk-1',
+      }));
+      const response = await handleOpenAiProxy({} as never, request('{"model":"deepseek/deepseek-v4-pro"}'), '/chat', identity, () =>
+        deepseekScope(proxy, { mode: 'reject', fallbackModel: null }),
+      );
+      expect(response.status).toBe(429);
+      expect(proxy).not.toHaveBeenCalled();
+      const payload = (await response.json()) as { error: { type: string } };
+      expect(payload.error.type).toBe('peak_hours');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rewrites to the fallback model during peak hours', async () => {
+    vi.useFakeTimers({ now: PEAK_MONDAY, toFake: ['Date'] });
+    try {
+      const proxy = vi.fn(async (_input: unknown) => ({
+        status: 200,
+        bodyText: '{}',
+        contentType: 'application/json',
+        providerKeyId: 'pk-1',
+      }));
+      const response = await handleOpenAiProxy({} as never, request('{"model":"deepseek/deepseek-v4-pro"}'), '/chat', identity, () =>
+        deepseekScope(proxy, { mode: 'fallback', fallbackModel: 'moonshotai/Kimi-K2.5' }),
+      );
+      expect(response.status).toBe(200);
+      const input = proxy.mock.calls[0]?.[0] as unknown as Record<string, unknown>;
+      expect(input.upstreamModel).toBe('moonshotai/Kimi-K2.5');
+      expect(input.upstreamBody).toMatchObject({ model: 'moonshotai/Kimi-K2.5' });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

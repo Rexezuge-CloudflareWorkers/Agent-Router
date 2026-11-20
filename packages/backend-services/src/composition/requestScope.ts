@@ -6,6 +6,7 @@ import {
   ProviderKeyDAO,
   UsageLedgerDAO,
   UserDAO,
+  UserPeakPreferenceDAO,
 } from '@agent-router/backend-data/dao';
 import type { D1Queryable } from '@rexezuge/d1';
 import { Container, memoizeAsync } from '@agent-router/backend-runtime/di';
@@ -20,6 +21,7 @@ import { ProviderKeyService, ProviderService } from '@agent-router/backend-servi
 import { RouterService } from '@agent-router/backend-services/router';
 import { UsageService } from '@agent-router/backend-services/usage';
 import { UserService } from '@agent-router/backend-services/user';
+import { UserPeakPreferenceService } from '@agent-router/backend-services/user';
 import { Tokens } from './tokens';
 
 interface RequestScopeEnv {
@@ -63,6 +65,7 @@ function createRequestScope(env: RequestScopeEnv): Container {
     ['CodexDeviceSessionDAO', () => Promise.resolve(new CodexDeviceSessionDAO(env.DB))],
     ['CommandCodeKeyStateDAO', () => Promise.resolve(new CommandCodeKeyStateDAO(env.DB))],
     ['UsageLedgerDAO', () => Promise.resolve(new UsageLedgerDAO(env.DB))],
+    ['UserPeakPreferenceDAO', () => Promise.resolve(new UserPeakPreferenceDAO(env.DB))],
   ];
   const daoFactories = {} as Record<string, () => Promise<unknown>>;
   for (const [tokenName, create] of daoDefs) {
@@ -79,9 +82,14 @@ function createRequestScope(env: RequestScopeEnv): Container {
   const codexSessionDAO = getDao<CodexDeviceSessionDAO>('CodexDeviceSessionDAO');
   const commandCodeKeyStateDAO = getDao<CommandCodeKeyStateDAO>('CommandCodeKeyStateDAO');
   const usageDAO = getDao<UsageLedgerDAO>('UsageLedgerDAO');
+  const userPeakPreferenceDAO = getDao<UserPeakPreferenceDAO>('UserPeakPreferenceDAO');
 
   scope.bind(Tokens.AccessAuthService, () => new AccessAuthService(env as never));
   scope.bind(Tokens.UserService, () => new UserService(env as never, { userDAO }));
+  scope.bind(
+    Tokens.UserPeakPreferenceService,
+    () => new UserPeakPreferenceService(env as never, { preferenceDAO: userPeakPreferenceDAO, userDAO }),
+  );
   scope.bind(Tokens.GatewayKeyService, () => new GatewayKeyService(env as never, { gatewayKeyDAO, userDAO, config }));
   scope.bind(Tokens.ProviderService, () => new ProviderService(env as never, { providerDAO, config }));
   scope.bind(

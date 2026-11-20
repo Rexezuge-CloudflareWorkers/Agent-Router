@@ -10,3 +10,5 @@ export { GatewayKeyDAO } from './GatewayKeyDAO';
 export type { GatewayKeyRow } from './GatewayKeyDAO';
 export { UsageLedgerDAO } from './UsageLedgerDAO';
 export type { UsageLedgerRow } from './UsageLedgerDAO';
+export { UserPeakPreferenceDAO } from './UserPeakPreferenceDAO';
+export type { UserPeakPreferenceRow } from './UserPeakPreferenceDAO';

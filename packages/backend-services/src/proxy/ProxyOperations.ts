@@ -2,6 +2,7 @@ import type { Container } from '@agent-router/backend-runtime/di';
 import type { ProviderKind } from '@agent-router/shared';
 import { NotFoundError, RateLimitedError, ServiceError } from '@rexezuge/errors';
 import { Tokens, createRequestScope } from '../composition/index';
+import { applyPeakPolicy } from './peakPolicy';
 
 type ProxyOperationsEnv = Parameters<typeof createRequestScope>[0];
 type ProxyScopeFactory = (env: ProxyOperationsEnv) => Container;
@@ -223,6 +224,10 @@ async function handleOpenAiProxy(
   if (parsed instanceof Response) return parsed;
   const body = parsed.body;
 
+  const decision = await applyPeakPolicy(scope, identity.userEmail, typeof body.model === 'string' ? body.model : null);
+  if (decision.action === 'reject') return decision.response;
+  if (decision.action === 'rewrite') body.model = decision.model;
+
   let provider: { id: string; kind: ProviderKind; baseUrl: string | null };
   try {
     provider = await resolveProviderId(scope, identity.userEmail, {
@@ -274,6 +279,12 @@ async function handleAnthropicProxy(
   if (parsed instanceof Response) return parsed;
   const body = parsed.body;
 
+  // The Anthropic surface also accepts Command Code providers, so a rewritten
+  // fallback model (e.g. deepseek/* -> moonshotai/*) still routes correctly.
+  const decision = await applyPeakPolicy(scope, identity.userEmail, typeof body.model === 'string' ? body.model : null);
+  if (decision.action === 'reject') return decision.response;
+  if (decision.action === 'rewrite') body.model = decision.model;
+
   let provider: { id: string; kind: ProviderKind; baseUrl: string | null };
   try {
     provider = await resolveProviderId(scope, identity.userEmail, { kind: 'ANTHROPIC', explicitId: readProviderHeader(request) });
@@ -312,6 +323,16 @@ async function handleGeminiProxy(
   if (parsed instanceof Response) return parsed;
   const body = parsed.body;
 
+  // Gemini carries the model in the path, not the body. A fallback used here
+  // must itself be a Gemini model, since only a GEMINI provider can serve it.
+  let model = match[1];
+  const decision = await applyPeakPolicy(scope, identity.userEmail, model.replace(/^models\//, ''));
+  if (decision.action === 'reject') return decision.response;
+  if (decision.action === 'rewrite') {
+    model = decision.model;
+    if (typeof body.model === 'string') body.model = decision.model;
+  }
+
   let provider: { id: string; kind: ProviderKind; baseUrl: string | null };
   try {
     provider = await resolveProviderId(scope, identity.userEmail, { kind: 'GEMINI', explicitId: readProviderHeader(request) });
@@ -323,8 +344,8 @@ async function handleGeminiProxy(
   }
   try {
     const result = await scope.get(Tokens.RouterService).proxy({
-      ...envelopeFor(provider, request, identity, body, parsed, match[1]),
-      upstreamPath: `/v1beta/${match[1]}:${match[2]}`,
+      ...envelopeFor(provider, request, identity, body, parsed, model),
+      upstreamPath: `/v1beta/${model}:${match[2]}`,
       upstreamBody: body,
     });
     // Gemini responses are always JSON; relay both buffered and streaming
