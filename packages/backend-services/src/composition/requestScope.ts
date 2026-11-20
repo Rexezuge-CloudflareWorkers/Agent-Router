@@ -29,15 +29,19 @@ interface RequestScopeEnv {
   COMMAND_CODE_FINGERPRINT_SALT?: { get(): Promise<string> };
 }
 
-interface RequestKeys {
-  providerKeysKey: string;
-  codexOAuthKey: string;
-}
+/**
+Builds the per-request dependency container.
 
+Services are bound lazily and memoized, so `scope.get(Tokens.RouterService)`
+and `scope.get(Tokens.CodexTokenService)` return objects that share the same
+`CodexTokenService` / `CommandCodeService` instances. That sharing is
+load-bearing: `CodexTokenService` holds a single-flight refresh map, and two
+instances would let concurrent proxy and token calls refresh the same OAuth key
+in parallel.
+*/
 function createRequestScope(env: RequestScopeEnv): Container {
   const scope = new Container();
-  scope.bindValue(Tokens.Env, env);
-  scope.bindValue(Tokens.Db, env.DB);
+  const config = AppConfiguration.fromEnv(env);
 
   const providerKeysKey = memoizeAsync(() => {
     if (!env.PROVIDER_KEYS_ENCRYPTION_SECRET) throw new Error('PROVIDER_KEYS_ENCRYPTION_SECRET is not configured for this scope.');
@@ -47,11 +51,9 @@ function createRequestScope(env: RequestScopeEnv): Container {
     if (!env.CODEX_OAUTH_ENCRYPTION_SECRET) throw new Error('CODEX_OAUTH_ENCRYPTION_SECRET is not configured for this scope.');
     return env.CODEX_OAUTH_ENCRYPTION_SECRET.get();
   });
-  const keys = memoizeAsync(async (): Promise<RequestKeys> => ({
-    providerKeysKey: await providerKeysKey(),
-    codexOAuthKey: await codexOAuthKey(),
-  }));
-  scope.bindValue(Tokens.Keys, keys);
+  const commandCodeSalt = async (): Promise<string> => {
+    return env.COMMAND_CODE_FINGERPRINT_SALT ? env.COMMAND_CODE_FINGERPRINT_SALT.get() : '';
+  };
 
   const daoDefs: Array<[string, () => Promise<unknown>]> = [
     ['UserDAO', () => Promise.resolve(new UserDAO(env.DB))],
@@ -78,25 +80,13 @@ function createRequestScope(env: RequestScopeEnv): Container {
   const commandCodeKeyStateDAO = getDao<CommandCodeKeyStateDAO>('CommandCodeKeyStateDAO');
   const usageDAO = getDao<UsageLedgerDAO>('UsageLedgerDAO');
 
-  const config = AppConfiguration.fromEnv(env);
-
-  async function resolveProviderKeysKey(): Promise<string> {
-    const resolved = await keys();
-    return resolved.providerKeysKey;
-  }
-
-  async function resolveCodexOAuthKey(): Promise<string> {
-    const resolved = await keys();
-    return resolved.codexOAuthKey;
-  }
-
   scope.bind(Tokens.AccessAuthService, () => new AccessAuthService(env as never));
   scope.bind(Tokens.UserService, () => new UserService(env as never, { userDAO }));
   scope.bind(Tokens.GatewayKeyService, () => new GatewayKeyService(env as never, { gatewayKeyDAO, userDAO, config }));
   scope.bind(Tokens.ProviderService, () => new ProviderService(env as never, { providerDAO, config }));
   scope.bind(
     Tokens.ProviderKeyService,
-    () => new ProviderKeyService(env as never, { providerDAO, providerKeyDAO, masterKey: resolveProviderKeysKey, config }),
+    () => new ProviderKeyService(env as never, { providerDAO, providerKeyDAO, masterKey: providerKeysKey, config }),
   );
   scope.bind(
     Tokens.CodexOAuthService,
@@ -105,25 +95,18 @@ function createRequestScope(env: RequestScopeEnv): Container {
         providerDAO,
         providerKeyDAO,
         deviceSessionDAO: codexSessionDAO,
-        masterKey: resolveCodexOAuthKey,
+        masterKey: codexOAuthKey,
         config,
       }),
   );
-  scope.bind(
-    Tokens.CodexTokenService,
-    () => new CodexTokenService(env as never, { providerKeyDAO, masterKey: resolveCodexOAuthKey, config }),
-  );
+  scope.bind(Tokens.CodexTokenService, () => new CodexTokenService(env as never, { providerKeyDAO, masterKey: codexOAuthKey, config }));
   scope.bind(
     Tokens.CommandCodeService,
-    () =>
-      new CommandCodeService(env as never, {
-        config,
-        keyStateDAO: commandCodeKeyStateDAO,
-        salt: async () => {
-          return env.COMMAND_CODE_FINGERPRINT_SALT ? env.COMMAND_CODE_FINGERPRINT_SALT.get() : '';
-        },
-      }),
+    () => new CommandCodeService(env as never, { config, keyStateDAO: commandCodeKeyStateDAO, salt: commandCodeSalt }),
   );
+  // The router shares the container's singletons rather than minting its own,
+  // so Codex refresh single-flight and Command Code fingerprint caching are
+  // process-wide, not per-service-instance.
   scope.bind(
     Tokens.RouterService,
     () =>
@@ -131,16 +114,10 @@ function createRequestScope(env: RequestScopeEnv): Container {
         providerDAO,
         providerKeyDAO,
         usageDAO,
-        masterKey: resolveProviderKeysKey,
+        masterKey: providerKeysKey,
         config,
-        codexTokens: new CodexTokenService(env as never, { providerKeyDAO, masterKey: resolveCodexOAuthKey, config }),
-        commandCode: new CommandCodeService(env as never, {
-          config,
-          keyStateDAO: commandCodeKeyStateDAO,
-          salt: async () => {
-            return env.COMMAND_CODE_FINGERPRINT_SALT ? env.COMMAND_CODE_FINGERPRINT_SALT.get() : '';
-          },
-        }),
+        codexTokens: scope.get(Tokens.CodexTokenService),
+        commandCode: scope.get(Tokens.CommandCodeService),
       }),
   );
   scope.bind(Tokens.UsageService, () => new UsageService(env as never, { usageDAO }));
@@ -150,4 +127,4 @@ function createRequestScope(env: RequestScopeEnv): Container {
 }
 
 export { createRequestScope };
-export type { RequestKeys, RequestScopeEnv };
+export type { RequestScopeEnv };

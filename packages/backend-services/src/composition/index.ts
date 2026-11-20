@@ -1,6 +1,6 @@
 export { Tokens } from './tokens';
 export { createRequestScope } from './requestScope';
-export type { RequestKeys, RequestScopeEnv } from './requestScope';
+export type { RequestScopeEnv } from './requestScope';
 
 export { AccessAuthService } from '../auth/AccessAuthService';
 export { GatewayKeyService } from '../gateway/GatewayKeyService';

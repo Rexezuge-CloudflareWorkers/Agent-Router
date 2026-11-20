@@ -46,47 +46,9 @@ function parseBearerToken(header: string): string | null {
   return token || null;
 }
 
-async function gatewayAuthenticationHandler(c: RequestContext, next: Next): Promise<Response | void> {
-  const token = parseBearerToken(c.req.header('authorization') ?? '');
-  if (!token) {
-    return c.json({ error: 'Missing gateway key' }, 401);
-  }
-  try {
-    const scope = getScope(c);
-    const auth = await scope.get(Tokens.GatewayKeyService).authenticate(token);
-    c.set('GatewayUserEmail' as never, auth.userEmail as never);
-    c.set('GatewayKeyId' as never, auth.keyId as never);
-    await next();
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unauthorized';
-    return c.json({ error: message }, 401);
-  }
-}
-
 class MiddlewareHandlers {
   public static userAuthentication(): (c: RequestContext, next: Next) => Promise<Response | void> {
     return userAuthenticationHandler;
-  }
-
-  public static gatewayAuthentication(): (c: RequestContext, next: Next) => Promise<Response | void> {
-    return gatewayAuthenticationHandler;
-  }
-
-  public static async requireUser(c: RequestContext): Promise<string | Response> {
-    try {
-      const existing = c.get('AuthenticatedUserEmailAddress') as string | undefined;
-      if (existing) return existing;
-      const email = await authenticateUserIdentity(c);
-      c.set('AuthenticatedUserEmailAddress', email);
-      return email;
-    } catch (error: unknown) {
-      if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
-        const message = error instanceof Error ? error.message : 'Unauthorized';
-        const status = error instanceof ForbiddenError ? 403 : 401;
-        return c.json({ error: message }, status as 401);
-      }
-      return c.json({ error: 'Internal error' }, 500);
-    }
   }
 
   public static async requireGateway(c: RequestContext): Promise<Response | { userEmail: string; keyId: string }> {

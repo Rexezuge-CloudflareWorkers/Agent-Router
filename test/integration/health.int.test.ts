@@ -8,16 +8,11 @@ describe('integration smoke', () => {
   });
 
   it('applies migrations including the codex device tables', async () => {
+    // 0005 drops the superseded codex_oauth_sessions table, so it must be absent.
     const result = await env.DB.prepare(
       `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('users', 'providers', 'provider_keys', 'codex_oauth_sessions', 'codex_device_sessions') ORDER BY name`,
     ).all<{ name: string }>();
-    expect((result.results ?? []).map((r) => r.name)).toEqual([
-      'codex_device_sessions',
-      'codex_oauth_sessions',
-      'provider_keys',
-      'providers',
-      'users',
-    ]);
+    expect((result.results ?? []).map((r) => r.name)).toEqual(['codex_device_sessions', 'provider_keys', 'providers', 'users']);
   });
 
   it('GET /health returns ok', async () => {

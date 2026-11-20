@@ -330,14 +330,6 @@ class CodexOAuthService {
     if (!updated) throw new NotFoundError('Provider key not found');
     return updated;
   }
-
-  public async getStatus(providerId: string, keyId: string, userEmail: string): Promise<ProviderKeyMetadata> {
-    const normalized = userEmail.toLowerCase();
-    const { keyDAO } = await this.requireCodexKey(providerId, keyId, normalized);
-    const meta = await keyDAO.getMetadataById(keyId);
-    if (!meta) throw new NotFoundError('Provider key not found');
-    return meta;
-  }
 }
 
 export { CodexOAuthService };

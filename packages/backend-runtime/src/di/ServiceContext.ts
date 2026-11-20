@@ -39,21 +39,6 @@ class SystemClock implements IClock {
   }
 }
 
-class NullLogger implements ILogger {
-  public debug(..._args: unknown[]): void {}
-  public info(..._args: unknown[]): void {}
-  public warn(..._args: unknown[]): void {}
-  public error(..._args: unknown[]): void {}
-}
-
-class FixedClock implements IClock {
-  constructor(private readonly fixed: number) {}
-
-  public nowSeconds(): number {
-    return this.fixed;
-  }
-}
-
 /**
 Single request-scoped context for Agent-Router domain services.
 */
@@ -76,5 +61,5 @@ function createServiceContext(env: ServiceEnv, overrides: ServiceContextOverride
   };
 }
 
-export { ConsoleLogger, SystemClock, NullLogger, FixedClock, createServiceContext };
+export { ConsoleLogger, SystemClock, createServiceContext };
 export type { IClock, ILogger, ServiceContext, ServiceContextOverrides };

@@ -10,7 +10,9 @@ import {
   resolveSessionId,
 } from '@agent-router/provider-clients/commandcode/CommandCodeWire';
 import { convertAnthropicToChat, convertResponsesToChat } from './CommandCodeConverters';
-import { CommandCodeAccumulator, mapCcError, parseLine } from '@agent-router/provider-clients/commandcode/CommandCodeEvents';
+import { mapCcError, parseLine } from '@agent-router/provider-clients/commandcode/CommandCodeEvents';
+import type { CommandCodeAccumulator } from '@agent-router/provider-clients/commandcode/CommandCodeEvents';
+import { abortError, relayStream, RETRYABLE_STATUSES } from './CommandCodeStream';
 import { CommandCodeChatTranslator } from './CommandCodeChatTranslator';
 import { CommandCodeAnthropicTranslator } from './CommandCodeAnthropicTranslator';
 import { CommandCodeResponsesTranslator } from './CommandCodeResponsesTranslator';
@@ -56,38 +58,9 @@ const INIT_JITTER_MS = 2 * 60 * 60 * 1000;
 const fingerprintCache = new Map<string, { fingerprint: Awaited<ReturnType<typeof generateFingerprint>>; key: string }>();
 const modelCache = new Map<string, { models: CommandCodeModel[]; expiresAt: number }>();
 
-function abortError(): Error {
-  return new DOMException('The operation was aborted', 'AbortError');
-}
-
 function stringField(value: unknown, field: string): string {
   const candidate = (value as Record<string, unknown> | null)?.[field];
   return typeof candidate === 'string' ? candidate : '';
-}
-
-const RETRYABLE_STATUSES = new Set([429, 502, 503]);
-
-async function readWithIdle(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-  idleMs: number,
-  signal?: AbortSignal,
-): Promise<ReadableStreamReadResult<Uint8Array>> {
-  if (signal?.aborted) throw abortError();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let onAbort: (() => void) | undefined;
-  const idle = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(Object.assign(new Error('STREAM_IDLE_TIMEOUT'), { code: 'STREAM_IDLE_TIMEOUT' })), idleMs);
-  });
-  const aborted = new Promise<never>((_, reject) => {
-    onAbort = () => reject(abortError());
-    signal?.addEventListener('abort', onAbort, { once: true });
-  });
-  try {
-    return await Promise.race([reader.read(), idle, aborted]);
-  } finally {
-    if (timer) clearTimeout(timer);
-    if (onAbort) signal?.removeEventListener('abort', onAbort);
-  }
 }
 
 class CommandCodeService {
@@ -281,121 +254,23 @@ class CommandCodeService {
     translator: CommandCodeTranslator,
     signal: AbortSignal,
   ): Promise<CommandCodeCallResult> {
-    if (!upstream.body) {
-      return { ok: false, status: 502, message: 'Upstream response had no body', retryable: true, code: null };
-    }
-    const reader = upstream.body.getReader();
-    const decoder = new TextDecoder();
-    const idleMs = this.deps.config.getCommandCodeStreamIdleMs();
-    let buffer = '';
-    let done = false;
-    const pending: string[] = [];
-
-    const feedChunk = (chunk: string): void => {
-      buffer += chunk;
-      if (!buffer.includes('\n')) return;
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
-      for (const line of lines) {
-        const event = parseLine(line);
-        if (!event) continue;
-        pending.push(...translator.feed(event));
-      }
-    };
-
-    while (!done && pending.length === 0) {
-      const read = await readWithIdle(reader, idleMs, signal);
-      done = read.done;
-      if (read.value) feedChunk(decoder.decode(read.value, { stream: true }));
-    }
-
-    if (done && pending.length === 0) {
-      if (buffer.trim()) {
-        const event = parseLine(buffer);
-        if (event) pending.push(...translator.feed(event));
-      }
-      const failure = translator.failure();
-      if (failure) {
-        return {
-          ok: false,
-          status: failure.status,
-          message: failure.message,
-          retryable: RETRYABLE_STATUSES.has(failure.status),
-          code: null,
-        };
-      }
-      pending.push(...translator.finalize());
-    }
-
-    // Promise.withResolvers is not in the ES2022 lib this package targets.
-    let resolveUsage: ((usage: { promptTokens: number; completionTokens: number; estimated: boolean }) => void) | null = null;
-    // eslint-disable-next-line unicorn/prefer-promise-with-resolvers
-    const usagePromise = new Promise<{ promptTokens: number; completionTokens: number; estimated: boolean }>((resolve) => {
-      resolveUsage = resolve;
+    const relayed = await relayStream({
+      upstream,
+      translator,
+      signal,
+      idleMs: this.deps.config.getCommandCodeStreamIdleMs(),
+      usageOf: (accumulator) => this.usageOf(accumulator),
     });
-    const initialUsage = this.usageOf(translator.accumulator);
-
-    const stream = new ReadableStream<Uint8Array>({
-      start: (controller) => {
-        const encoder = new TextEncoder();
-        for (const chunk of pending) controller.enqueue(encoder.encode(chunk));
-        pending.length = 0;
-        void (async () => {
-          try {
-            while (!done) {
-              const read = await readWithIdle(reader, idleMs, signal);
-              done = read.done;
-              if (!read.value) {
-                continue;
-              }
-
-              buffer += decoder.decode(read.value, { stream: true });
-              if (!buffer.includes('\n')) continue;
-              const lines = buffer.split('\n');
-              buffer = lines.pop() ?? '';
-              for (const line of lines) {
-                const event = parseLine(line);
-                if (!event) continue;
-                for (const chunk of translator.feed(event)) controller.enqueue(encoder.encode(chunk));
-              }
-            }
-            if (buffer.trim()) {
-              const event = parseLine(buffer);
-              if (event) for (const chunk of translator.feed(event)) controller.enqueue(encoder.encode(chunk));
-            }
-            for (const chunk of translator.finalize()) controller.enqueue(encoder.encode(chunk));
-            resolveUsage?.(this.usageOf(translator.accumulator));
-            controller.close();
-          } catch (error) {
-            if (error instanceof Error && error.name === 'AbortError') {
-              resolveUsage?.(this.usageOf(translator.accumulator));
-              controller.error(error);
-              return;
-            }
-            const message = error instanceof Error ? error.message : 'Upstream stream failed';
-            const event =
-              translator.accumulator.error?.status === 429
-                ? `data: ${JSON.stringify({ error: { message, type: 'rate_limit_error' }, retry_after: 10 })}\n\n`
-                : `data: ${JSON.stringify({ error: { message, type: 'upstream_error' }, retry_after: 10 })}\n\n`;
-            controller.enqueue(new TextEncoder().encode(event));
-            resolveUsage?.(this.usageOf(translator.accumulator));
-            controller.close();
-          }
-        })();
-      },
-      cancel: () => {
-        resolveUsage?.(this.usageOf(translator.accumulator));
-        void reader.cancel().catch(() => {});
-      },
-    });
-
+    if (!relayed.ok) {
+      return { ok: false, status: relayed.status, message: relayed.message, retryable: relayed.retryable, code: null };
+    }
     return {
       ok: true,
       result: {
-        bodyStream: stream,
+        bodyStream: relayed.bodyStream,
         contentType: 'text/event-stream',
-        ...initialUsage,
-        usagePromise,
+        ...relayed.initialUsage,
+        usagePromise: relayed.usagePromise,
       } satisfies CommandCodeStreamResult,
     };
   }

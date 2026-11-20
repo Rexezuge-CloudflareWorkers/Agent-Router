@@ -3,8 +3,9 @@ export {
   runScheduledTasks,
   GatewayKeyPruningTask,
   UsageResetTask,
+  CodexTokenRefreshTask,
   KeyHealthTask,
   UsagePruneTask,
 } from './TaskRegistry';
-export type { ScheduledTask } from './TaskRegistry';
+export type { ScheduledTask, ScopeFactory } from './TaskRegistry';
 export { BaseScheduledTask } from './IScheduledTask';

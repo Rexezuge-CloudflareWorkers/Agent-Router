@@ -14,13 +14,13 @@ const SECURITY_HEADERS: Record<string, string> = {
 };
 
 // Paths carrying bearer secrets — never allow caching of their responses.
-// Exact-prefix match (not substring) so future `/hooks`-like paths cannot
-// accidentally inherit `no-store`, and secret routes cannot be missed.
+// Exact prefix matching (not substring) so a future `/hooks/providers/`-like
+// path cannot accidentally inherit `no-store`, and secret routes cannot be
+// missed.
 function isSensitiveJsonPath(pathname: string): boolean {
   return (
     pathname === '/user/gateway-keys' ||
     pathname.startsWith('/user/gateway-keys/') ||
-    pathname.includes('/providers/') ||
     pathname === '/user/providers' ||
     pathname.startsWith('/user/providers/')
   );

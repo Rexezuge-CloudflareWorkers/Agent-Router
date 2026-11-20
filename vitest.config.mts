@@ -28,7 +28,8 @@ export default defineRepoVitestConfig({
 
   coverageExclude: ['**/model/**'],
 
-  // Scaffold baseline: router core covered; raise stepwise toward 70/55/70/70
-  // as proxy/cron/UI tests land.
-  thresholds: { statements: 20, branches: 15, functions: 12, lines: 22 },
+  // Raised after the hardening pass added DAO, auth, adapter, cron and
+  // composition coverage. Actuals sit above these floors; keep headroom so a
+  // refactor that trims a few branches does not fail the gate outright.
+  thresholds: { statements: 50, branches: 40, functions: 50, lines: 50 },
 });

@@ -1,5 +1,4 @@
 import { UserDAO } from '@agent-router/backend-data/dao';
-import type { UserRow } from '@agent-router/backend-data/dao';
 import type { D1Queryable } from '@rexezuge/d1';
 import { BadRequestError, NotFoundError } from '@rexezuge/errors';
 import { isReservedNamespaceName } from '@agent-router/shared/constants';
@@ -94,15 +93,6 @@ class UserService {
     const row = await dao.getByEmail(email.toLowerCase());
     if (!row) throw new NotFoundError('User not found');
     return { email: row.email, username: row.username ?? null };
-  }
-
-  public async getByUsername(username: string): Promise<UserRow | null> {
-    const dao = await this.deps.userDAO();
-    try {
-      return await dao.getByUsernameCi(username.toLowerCase());
-    } catch {
-      return null;
-    }
   }
 
   public async renameUsername(email: string, newUsername: string): Promise<{ email: string; username: string }> {

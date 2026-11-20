@@ -1,95 +1,22 @@
 import { ProviderDAO, ProviderKeyDAO, UsageLedgerDAO } from '@agent-router/backend-data/dao';
 import type { ProviderKeyRow } from '@agent-router/backend-data/dao';
-import type { D1Queryable } from '@rexezuge/d1';
 import { BadRequestError, NotFoundError, RateLimitedError } from '@rexezuge/errors';
-import type { ProviderKind } from '@agent-router/shared';
-import { TimestampUtil, UUIDUtil } from '@rexezuge/shared';
+import { TimestampUtil } from '@rexezuge/shared';
 import { AppConfiguration } from '@agent-router/backend-runtime/config';
 import { KeyCrypto } from '../provider/KeyCrypto';
-import type { CommandCodeEndpoint, CommandCodeService } from '../commandcode';
 import {
   buildCodexCall,
   buildUpstreamCall,
   extractCodexCompletedResponse,
-  extractHtmlPageText,
   isRetryableStatus,
   parseUsage,
   tapUsageStream,
 } from '@agent-router/provider-clients/upstream';
 import type { ParsedUsage, UpstreamCall } from '@agent-router/provider-clients/upstream';
-
-interface RouterServiceEnv {
-  DB: D1Queryable;
-  PROXY_TIMEOUT_MS?: string;
-  PROXY_MAX_ATTEMPTS?: string;
-  PROXY_MAX_BODY_BYTES?: string;
-  KEY_COOLDOWN_BASE_MS?: string;
-  KEY_MAX_CONSECUTIVE_FAILURES?: string;
-  PROVIDER_KEYS_ENCRYPTION_SECRET?: { get(): Promise<string> };
-}
-
-interface RouterServiceDeps {
-  providerDAO?: () => Promise<ProviderDAO>;
-  providerKeyDAO?: () => Promise<ProviderKeyDAO>;
-  usageDAO?: () => Promise<UsageLedgerDAO>;
-  masterKey?: () => Promise<string>;
-  config?: AppConfiguration;
-  fetchImpl?: typeof fetch;
-  codexTokens?: CodexAccessResolver;
-  commandCode?: CommandCodeService;
-}
-
-// Minimal structural surface of CodexTokenService so the router stays
-// decoupled (type-only; the concrete service is wired in requestScope).
-interface CodexAccessResolver {
-  getAccessToken(
-    providerId: string,
-    keyId: string,
-    userEmail: string,
-    opts?: { forceRefresh?: boolean },
-  ): Promise<{ accessToken: string; accountId: string | null }>;
-}
-
-interface ProxyRequest {
-  userEmail: string;
-  gatewayKeyId: string | null;
-  providerId: string;
-  providerKind: ProviderKind;
-  providerBaseUrl: string | null;
-  upstreamPath: string;
-  upstreamBody: unknown;
-  upstreamModel: string | null;
-  bodyBytes: number;
-  /**
-  The request body exactly as the client sent it. Reused for providers that
-  do not rewrite the payload so it is serialized once instead of twice.
-  */
-  rawBodyText?: string;
-  /**
-  Client-facing endpoint; Command Code collapses all of them to /alpha/generate.
-  */
-  clientEndpoint?: CommandCodeEndpoint;
-  clientStream?: boolean;
-  incomingHeaders?: Record<string, string | undefined>;
-  signal?: AbortSignal;
-}
-
-interface ProxySuccess {
-  status: number;
-  bodyText?: string;
-  bodyStream?: ReadableStream<Uint8Array>;
-  contentType: string | null;
-  promptTokens: number;
-  completionTokens: number;
-  estimated: boolean;
-  providerKeyId: string;
-  attempts: number;
-}
-
-function cooldownForFailures(baseMs: number, failures: number): number {
-  const capped = Math.min(failures, 6);
-  return baseMs * 2 ** capped;
-}
+import { isCapExceeded, isOAuthKey, isOAuthUsable, recordKeyFailure } from './keyHealth';
+import { recordFailedUsage, recordSuccessfulUsage } from './usageRecorder';
+import { toUpstreamError, withStatusCode } from './upstreamErrors';
+import type { AttemptContext, AttemptOutcome, ProxyRequest, ProxySuccess, RouterServiceDeps, RouterServiceEnv } from './types';
 
 class RouterService {
   private readonly deps: Required<Omit<RouterServiceDeps, 'codexTokens' | 'commandCode'>> &
@@ -123,27 +50,13 @@ class RouterService {
     };
   }
 
-  private isCapExceeded(row: ProviderKeyRow): boolean {
-    if (row.token_limit !== null && row.used_tokens >= row.token_limit) return true;
-    if (row.request_limit !== null && row.used_requests >= row.request_limit) return true;
-    return false;
-  }
-
-  private isOAuthKey(row: ProviderKeyRow): boolean {
-    return (row.auth_type ?? 'static') === 'codex_oauth';
-  }
-
-  private isOAuthUsable(row: ProviderKeyRow): boolean {
-    return this.isOAuthKey(row) && row.oauth_status === 'connected' && row.encrypted_refresh_token != null;
-  }
-
   private async buildCallForCandidate(
     candidate: ProviderKeyRow,
     req: ProxyRequest,
     masterKey: string,
     forceRefresh = false,
   ): Promise<UpstreamCall> {
-    if (this.isOAuthKey(candidate)) {
+    if (isOAuthKey(candidate)) {
       const resolver = this.deps.codexTokens;
       if (!resolver) throw new BadRequestError('Codex OAuth is not configured for this request');
       const tokens = await resolver.getAccessToken(req.providerId, candidate.id, req.userEmail, forceRefresh ? { forceRefresh: true } : {});
@@ -151,41 +64,6 @@ class RouterService {
     }
     const secret = await KeyCrypto.decrypt(candidate.encrypted_key, masterKey, 'provider-keys');
     return buildUpstreamCall(req.providerKind, req.providerBaseUrl, req.upstreamPath, secret, req.upstreamBody, undefined, req.rawBodyText);
-  }
-
-  private async recordUsage(
-    keyDAO: ProviderKeyDAO,
-    usageDAO: UsageLedgerDAO,
-    candidate: ProviderKeyRow,
-    req: ProxyRequest,
-    usage: ParsedUsage,
-    latencyMs: number,
-    statusCode = 200,
-  ): Promise<void> {
-    await keyDAO
-      .recordSuccess(candidate.id, usage.promptTokens, usage.completionTokens, TimestampUtil.getCurrentUnixTimestampInSeconds())
-      .catch(() => {});
-    const refreshed = await keyDAO.getById(candidate.id).catch(() => null);
-    if (refreshed && this.isCapExceeded(refreshed)) {
-      await keyDAO.markExhausted(candidate.id, TimestampUtil.getCurrentUnixTimestampInSeconds()).catch(() => {});
-    }
-    await usageDAO
-      .insert({
-        id: UUIDUtil.getRandomUUID(),
-        userEmail: req.userEmail,
-        gatewayKeyId: req.gatewayKeyId,
-        providerId: req.providerId,
-        providerKeyId: candidate.id,
-        upstreamModel: req.upstreamModel,
-        promptTokens: usage.promptTokens,
-        completionTokens: usage.completionTokens,
-        latencyMs,
-        statusCode,
-        errorCode: null,
-        estimated: usage.estimated,
-        now: TimestampUtil.getCurrentUnixTimestampInSeconds(),
-      })
-      .catch(() => {});
   }
 
   private async fetchWithTimeout(call: UpstreamCall, timeoutMs: number): Promise<Response> {
@@ -199,48 +77,19 @@ class RouterService {
   }
 
   /**
-  Maps a non-retryable upstream body to a client-facing error. The Codex
-  backend answers failed auth/edge checks with its login HTML page
-  instead of JSON; surface the page copy plus whether an account was even
-  linked, rather than markup.
+  Validates the request, resolves the provider, and partitions its keys into
+  usable / capped / OAuth-blocked. Throws when no usable key remains.
   */
-  private static toUpstreamError(
-    kind: ProviderKind,
-    status: number,
-    bodyText: string,
-    lastError: string,
-    accountRouted: boolean,
-  ): BadRequestError {
-    if (kind === 'OPENAI_CODEX' && /^\s*</.test(bodyText)) {
-      const text = extractHtmlPageText(bodyText);
-      const message = accountRouted
-        ? `Codex backend returned a login page (status ${status}) even with a linked account — likely an access challenge from this network.`
-        : `Codex backend returned a login page (status ${status}) and no ChatGPT account is linked to this key. Re-import the full auth JSON so the account id is stored, then retry.`;
-      return new BadRequestError(`${message}${text ? ` Page: ${text}` : ''}`.slice(0, 400));
-    }
-    return new BadRequestError(lastError.slice(0, 300));
-  }
-
-  public async proxy(req: ProxyRequest): Promise<ProxySuccess> {
-    const maxBody =
-      req.providerKind === 'COMMAND_CODE' ? this.deps.config.getCommandCodeMaxBodyBytes() : this.deps.config.getProxyMaxBodyBytes();
-    if (req.bodyBytes > maxBody) throw new BadRequestError('Request body too large');
-    const maxAttempts = this.deps.config.getProxyMaxAttempts();
-    const timeoutMs = this.deps.config.getProxyTimeoutMs();
-    const cooldownBase = this.deps.config.getKeyCooldownBaseMs();
-    const disableAfter = this.deps.config.getKeyMaxConsecutiveFailures();
-
+  private async selectCandidates(req: ProxyRequest, keyDAO: ProviderKeyDAO, now: number): Promise<ProviderKeyRow[]> {
     const providerDAO = await this.deps.providerDAO();
     const provider = await providerDAO.getById(req.providerId);
     if (!provider || provider.userEmail.toLowerCase() !== req.userEmail.toLowerCase()) throw new NotFoundError('Provider not found');
     if (provider.status !== 'active') throw new BadRequestError('Provider is disabled');
 
-    const keyDAO = await this.deps.providerKeyDAO();
-    const now = TimestampUtil.getCurrentUnixTimestampInSeconds();
     const candidates = await keyDAO.listSelectableByProvider(req.providerId, now);
-    const usable = candidates.filter((k) => !this.isCapExceeded(k) && (!this.isOAuthKey(k) || this.isOAuthUsable(k)));
-    const capped = candidates.filter((k) => this.isCapExceeded(k));
-    const oauthBlocked = candidates.filter((k) => !this.isCapExceeded(k) && this.isOAuthKey(k) && !this.isOAuthUsable(k));
+    const usable = candidates.filter((k) => !isCapExceeded(k) && (!isOAuthKey(k) || isOAuthUsable(k)));
+    const capped = candidates.filter((k) => isCapExceeded(k));
+    const oauthBlocked = candidates.filter((k) => !isCapExceeded(k) && isOAuthKey(k) && !isOAuthUsable(k));
     // Mark newly-capped keys exhausted best-effort (does not block the request).
     for (const key of capped) {
       await keyDAO.markExhausted(key.id, now).catch(() => {});
@@ -251,277 +100,214 @@ class RouterService {
       }
       throw new RateLimitedError('All provider keys are exhausted or cooling. Try again later.');
     }
+    return usable;
+  }
 
-    const masterKey = await this.deps.masterKey();
+  /** Runs one Command Code attempt and returns its outcome. Health/ledger
+  bookkeeping for retryable failures happens inline; non-retryable failures
+  are returned for the caller to raise. */
+  private async attemptCommandCode(candidate: ProviderKeyRow, req: ProxyRequest, context: AttemptContext): Promise<AttemptOutcome> {
+    const commandCode = this.deps.commandCode;
+    if (!commandCode) throw new BadRequestError('Command Code is not configured for this request');
+    const startedMs = Date.now();
+    const secret = await KeyCrypto.decrypt(candidate.encrypted_key, context.masterKey, 'provider-keys');
+    await commandCode.ensureInitialized(secret, candidate.id, req.providerBaseUrl, req.signal);
+    const response = await commandCode.call({
+      endpoint: req.clientEndpoint ?? 'chat',
+      baseUrl: req.providerBaseUrl,
+      secret,
+      keyId: candidate.id,
+      body: req.upstreamBody,
+      incomingHeaders: req.incomingHeaders ?? {},
+      stream: req.clientStream === true,
+      signal: req.signal,
+    });
+    const latencyMs = Date.now() - startedMs;
+    if (!response.ok) {
+      await recordFailedUsage(context.usageDAO, candidate, req, response.status, latencyMs);
+      return { kind: 'failed', status: response.status, message: response.message, accountRouted: false };
+    }
+    const success = response.result;
+    if ('usagePromise' in success) {
+      void success.usagePromise
+        .then((usage) => recordSuccessfulUsage(context.keyDAO, context.usageDAO, candidate, req, usage, latencyMs))
+        .catch(() => {});
+    } else {
+      await recordSuccessfulUsage(context.keyDAO, context.usageDAO, candidate, req, success, latencyMs);
+    }
+    return {
+      kind: 'success',
+      success: {
+        status: 200,
+        ...('bodyStream' in success ? { bodyStream: success.bodyStream } : { bodyText: success.bodyText }),
+        contentType: success.contentType,
+        promptTokens: success.promptTokens,
+        completionTokens: success.completionTokens,
+        estimated: success.estimated,
+        providerKeyId: candidate.id,
+        attempts: 0,
+      },
+    };
+  }
+
+  /** Runs one standard (OpenAI/Anthropic/Gemini/Codex) attempt. Thrown
+  transport/refresh errors bubble to `proxy`, which cools the key and fails over. */
+  private async attemptStandard(candidate: ProviderKeyRow, req: ProxyRequest, context: AttemptContext): Promise<AttemptOutcome> {
+    const startedMs = Date.now();
+    let call = await this.buildCallForCandidate(candidate, req, context.masterKey);
+    let accountRouted = 'ChatGPT-Account-Id' in call.headers;
+    let upstream = await this.fetchWithTimeout(call, context.timeoutMs);
+    // OAuth access tokens can be revoked server-side before JWT expiry:
+    // force one refresh-and-retry before treating the 401 as a key failure.
+    if (upstream.status === 401 && isOAuthKey(candidate)) {
+      call = await this.buildCallForCandidate(candidate, req, context.masterKey, true);
+      accountRouted = 'ChatGPT-Account-Id' in call.headers;
+      upstream = await this.fetchWithTimeout(call, context.timeoutMs);
+    }
+    const latencyMs = Date.now() - startedMs;
+    return this.completeStandardUpstream(upstream, candidate, req, context, { latencyMs, accountRouted, startedMs });
+  }
+
+  private async completeStandardUpstream(
+    upstream: Response,
+    candidate: ProviderKeyRow,
+    req: ProxyRequest,
+    context: AttemptContext,
+    timing: { latencyMs: number; accountRouted: boolean; startedMs: number },
+  ): Promise<AttemptOutcome> {
+    // Streaming clients get the upstream bytes relayed as they arrive.
+    if (upstream.status >= 200 && upstream.status < 300 && req.clientStream === true && upstream.body) {
+      const tapped = tapUsageStream(upstream.body);
+      void tapped.usage
+        .then((usage) => recordSuccessfulUsage(context.keyDAO, context.usageDAO, candidate, req, usage, timing.latencyMs, upstream.status))
+        .catch(() => {});
+      return {
+        kind: 'success',
+        success: {
+          status: upstream.status,
+          bodyStream: tapped.stream,
+          contentType: upstream.headers.get('content-type') ?? 'text/event-stream',
+          promptTokens: 0,
+          completionTokens: 0,
+          estimated: true,
+          providerKeyId: candidate.id,
+          attempts: 0,
+        },
+      };
+    }
+    const bodyText = await upstream.text();
+    const latencyMs = Date.now() - timing.startedMs;
+    // The Codex backend only serves SSE: non-streaming clients get the
+    // completed response object re-assembled as JSON (raw SSE relay when
+    // assembly finds nothing).
+    let responseText = bodyText;
+    let responseContentType: string | null = null;
+    if (req.providerKind === 'OPENAI_CODEX') {
+      const assembled = extractCodexCompletedResponse(bodyText);
+      if (assembled === null) {
+        responseContentType = 'text/event-stream';
+      } else {
+        responseText = assembled;
+        responseContentType = 'application/json';
+      }
+    }
+    if (upstream.status >= 200 && upstream.status < 300) {
+      let usage: ParsedUsage = { promptTokens: 0, completionTokens: 0, estimated: true };
+      try {
+        usage = parseUsage(req.providerKind, JSON.parse(responseText));
+      } catch {
+        usage = { promptTokens: 0, completionTokens: 0, estimated: true };
+      }
+      await recordSuccessfulUsage(context.keyDAO, context.usageDAO, candidate, req, usage, latencyMs, upstream.status);
+      return {
+        kind: 'success',
+        success: {
+          status: upstream.status,
+          bodyText: responseText,
+          contentType: responseContentType,
+          promptTokens: usage.promptTokens,
+          completionTokens: usage.completionTokens,
+          estimated: usage.estimated,
+          providerKeyId: candidate.id,
+          attempts: 0,
+        },
+      };
+    }
+    await recordFailedUsage(context.usageDAO, candidate, req, upstream.status, latencyMs);
+    return {
+      kind: 'failed',
+      status: upstream.status,
+      message: bodyText.slice(0, 300) || `Upstream error ${upstream.status}`,
+      accountRouted: timing.accountRouted,
+    };
+  }
+
+  public async proxy(req: ProxyRequest): Promise<ProxySuccess> {
+    const maxBody =
+      req.providerKind === 'COMMAND_CODE' ? this.deps.config.getCommandCodeMaxBodyBytes() : this.deps.config.getProxyMaxBodyBytes();
+    if (req.bodyBytes > maxBody) throw new BadRequestError('Request body too large');
+
+    const maxAttempts = this.deps.config.getProxyMaxAttempts();
+    const keyDAO = await this.deps.providerKeyDAO();
     const usageDAO = await this.deps.usageDAO();
+    const now = TimestampUtil.getCurrentUnixTimestampInSeconds();
+    const usable = await this.selectCandidates(req, keyDAO, now);
+    const context: AttemptContext = {
+      keyDAO,
+      usageDAO,
+      masterKey: await this.deps.masterKey(),
+      timeoutMs: this.deps.config.getProxyTimeoutMs(),
+      cooldownBase: this.deps.config.getKeyCooldownBaseMs(),
+      disableAfter: this.deps.config.getKeyMaxConsecutiveFailures(),
+    };
+
     let lastError = 'Upstream request failed';
     let lastStatus = 502;
-    let lastAccountRouted = false;
     const attempts = Math.min(maxAttempts, usable.length);
     for (let i = 0; i < attempts; i += 1) {
       const candidate = usable[i];
-      const startedMs = Date.now();
       try {
-        if (req.providerKind === 'COMMAND_CODE') {
-          const commandCode = this.deps.commandCode;
-          if (!commandCode) throw new BadRequestError('Command Code is not configured for this request');
-          const secret = await KeyCrypto.decrypt(candidate.encrypted_key, masterKey, 'provider-keys');
-          await commandCode.ensureInitialized(secret, candidate.id, req.providerBaseUrl, req.signal);
-          const response = await commandCode.call({
-            endpoint: req.clientEndpoint ?? 'chat',
-            baseUrl: req.providerBaseUrl,
-            secret,
-            keyId: candidate.id,
-            body: req.upstreamBody,
-            incomingHeaders: req.incomingHeaders ?? {},
-            stream: req.clientStream === true,
-            signal: req.signal,
-          });
-          const latencyMs = Date.now() - startedMs;
-          if (!response.ok) {
-            lastStatus = response.status;
-            lastError = response.message;
-            if (response.retryable) {
-              if (response.status === 429) {
-                // Rate limits are temporary: keep the key as a last-resort
-                // fallback instead of counting it toward auto-disable.
-                await keyDAO
-                  .markDegraded(candidate.id, `Upstream ${response.status}`, TimestampUtil.getCurrentUnixTimestampInSeconds())
-                  .catch(() => {});
-              } else {
-                const failures = candidate.consecutive_failures + 1;
-                const cooldownUntil =
-                  failures >= disableAfter
-                    ? null
-                    : TimestampUtil.getCurrentUnixTimestampInSeconds() + Math.ceil(cooldownForFailures(cooldownBase, failures) / 1000);
-                await keyDAO
-                  .recordFailure(
-                    candidate.id,
-                    `Upstream ${response.status}`,
-                    cooldownUntil,
-                    TimestampUtil.getCurrentUnixTimestampInSeconds(),
-                  )
-                  .catch(() => {});
-              }
-              await usageDAO
-                .insert({
-                  id: UUIDUtil.getRandomUUID(),
-                  userEmail: req.userEmail,
-                  gatewayKeyId: req.gatewayKeyId,
-                  providerId: req.providerId,
-                  providerKeyId: candidate.id,
-                  upstreamModel: req.upstreamModel,
-                  promptTokens: 0,
-                  completionTokens: 0,
-                  latencyMs,
-                  statusCode: response.status,
-                  errorCode: `UPSTREAM_${response.status}`,
-                  estimated: false,
-                  now: TimestampUtil.getCurrentUnixTimestampInSeconds(),
-                })
-                .catch(() => {});
-              continue;
-            }
-            await usageDAO
-              .insert({
-                id: UUIDUtil.getRandomUUID(),
-                userEmail: req.userEmail,
-                gatewayKeyId: req.gatewayKeyId,
-                providerId: req.providerId,
-                providerKeyId: candidate.id,
-                upstreamModel: req.upstreamModel,
-                promptTokens: 0,
-                completionTokens: 0,
-                latencyMs,
-                statusCode: response.status,
-                errorCode: `UPSTREAM_${response.status}`,
-                estimated: false,
-                now: TimestampUtil.getCurrentUnixTimestampInSeconds(),
-              })
-              .catch(() => {});
-            const error = new BadRequestError(response.message.slice(0, 300));
-            (error as unknown as { statusCode?: number }).statusCode = response.status;
-            throw error;
-          }
-
-          const success = response.result;
-          if ('usagePromise' in success) {
-            void success.usagePromise.then((usage) => this.recordUsage(keyDAO, usageDAO, candidate, req, usage, latencyMs)).catch(() => {});
-          } else {
-            await this.recordUsage(keyDAO, usageDAO, candidate, req, success, latencyMs);
-          }
-          return {
-            status: 200,
-            ...('bodyStream' in success ? { bodyStream: success.bodyStream } : { bodyText: success.bodyText }),
-            contentType: success.contentType,
-            promptTokens: success.promptTokens,
-            completionTokens: success.completionTokens,
-            estimated: success.estimated,
-            providerKeyId: candidate.id,
-            attempts: i + 1,
-          };
+        const outcome =
+          req.providerKind === 'COMMAND_CODE'
+            ? await this.attemptCommandCode(candidate, req, context)
+            : await this.attemptStandard(candidate, req, context);
+        if (outcome.kind === 'success') {
+          return { ...outcome.success, attempts: i + 1 };
         }
-        let call = await this.buildCallForCandidate(candidate, req, masterKey);
-        lastAccountRouted = 'ChatGPT-Account-Id' in call.headers;
-        let upstream = await this.fetchWithTimeout(call, timeoutMs);
-        // OAuth access tokens can be revoked server-side before JWT expiry:
-        // force one refresh-and-retry before treating the 401 as a key failure.
-        if (upstream.status === 401 && this.isOAuthKey(candidate)) {
-          try {
-            call = await this.buildCallForCandidate(candidate, req, masterKey, true);
-            lastAccountRouted = 'ChatGPT-Account-Id' in call.headers;
-            upstream = await this.fetchWithTimeout(call, timeoutMs);
-          } catch (error) {
-            const message = error instanceof Error ? error.message : 'Upstream request failed';
-            lastError = message.slice(0, 300);
-            lastStatus = 401;
-            const failures = candidate.consecutive_failures + 1;
-            const cooldownUntil =
-              TimestampUtil.getCurrentUnixTimestampInSeconds() + Math.ceil(cooldownForFailures(cooldownBase, failures) / 1000);
-            await keyDAO
-              .recordFailure(candidate.id, message.slice(0, 500), cooldownUntil, TimestampUtil.getCurrentUnixTimestampInSeconds())
-              .catch(() => {});
-            continue;
-          }
-        }
-        // Streaming clients get the upstream bytes relayed as they arrive.
-        // Buffering first made every streaming call pay for the whole response
-        // before the client saw a byte — the main CPU sink on long /responses
-        // generations.
-        if (upstream.status >= 200 && upstream.status < 300 && req.clientStream === true && upstream.body) {
-          const latencyMs = Date.now() - startedMs;
-          const tapped = tapUsageStream(upstream.body);
-          void tapped.usage
-            .then((usage) => this.recordUsage(keyDAO, usageDAO, candidate, req, usage, latencyMs, upstream.status))
-            .catch(() => {});
-          return {
-            status: upstream.status,
-            bodyStream: tapped.stream,
-            contentType: upstream.headers.get('content-type') ?? 'text/event-stream',
-            promptTokens: 0,
-            completionTokens: 0,
-            estimated: true,
-            providerKeyId: candidate.id,
-            attempts: i + 1,
-          };
-        }
-        const bodyText = await upstream.text();
-        const latencyMs = Date.now() - startedMs;
-        // The Codex backend only serves SSE: non-streaming clients get the
-        // completed response object re-assembled as JSON (raw SSE relay when
-        // assembly finds nothing).
-        let responseText = bodyText;
-        let responseContentType: string | null = null;
-        if (req.providerKind === 'OPENAI_CODEX') {
-          const assembled = extractCodexCompletedResponse(bodyText);
-          if (assembled === null) {
-            responseContentType = 'text/event-stream';
-          } else {
-            responseText = assembled;
-            responseContentType = 'application/json';
-          }
-        }
-        if (upstream.status >= 200 && upstream.status < 300) {
-          let usage: ParsedUsage = { promptTokens: 0, completionTokens: 0, estimated: true };
-          try {
-            usage = parseUsage(req.providerKind, JSON.parse(responseText));
-          } catch {
-            usage = { promptTokens: 0, completionTokens: 0, estimated: true };
-          }
-          await this.recordUsage(keyDAO, usageDAO, candidate, req, usage, latencyMs, upstream.status);
-          return {
-            status: upstream.status,
-            bodyText: responseText,
-            contentType: responseContentType,
-            promptTokens: usage.promptTokens,
-            completionTokens: usage.completionTokens,
-            estimated: usage.estimated,
-            providerKeyId: candidate.id,
-            attempts: i + 1,
-          };
-        }
-        lastStatus = upstream.status;
-        lastError = bodyText.slice(0, 300) || `Upstream error ${upstream.status}`;
-        if (isRetryableStatus(upstream.status)) {
-          if (upstream.status === 429) {
+        lastStatus = outcome.status;
+        lastError = outcome.message;
+        if (isRetryableStatus(outcome.status)) {
+          if (outcome.status === 429) {
             // Rate limits are temporary: keep the key as a last-resort
             // fallback instead of counting it toward auto-disable.
-            await keyDAO
-              .markDegraded(candidate.id, `Upstream ${upstream.status}`, TimestampUtil.getCurrentUnixTimestampInSeconds())
-              .catch(() => {});
+            await keyDAO.markDegraded(candidate.id, `Upstream ${outcome.status}`, now).catch(() => {});
           } else {
-            const failures = candidate.consecutive_failures + 1;
-            const cooldownUntil =
-              failures >= disableAfter
-                ? null
-                : TimestampUtil.getCurrentUnixTimestampInSeconds() + Math.ceil(cooldownForFailures(cooldownBase, failures) / 1000);
-            await keyDAO
-              .recordFailure(candidate.id, `Upstream ${upstream.status}`, cooldownUntil, TimestampUtil.getCurrentUnixTimestampInSeconds())
-              .catch(() => {});
-            if (failures >= disableAfter) {
-              const db = (keyDAO as unknown as { database: { prepare(q: string): { bind(...v: unknown[]): { run(): Promise<unknown> } } } })
-                .database;
-              await db
-                .prepare(`UPDATE provider_keys SET status = 'disabled', updated_at = ? WHERE id = ?`)
-                .bind(TimestampUtil.getCurrentUnixTimestampInSeconds(), candidate.id)
-                .run()
-                .catch(() => {});
-            }
+            await recordKeyFailure(keyDAO, candidate, `Upstream ${outcome.status}`, now, {
+              baseMs: context.cooldownBase,
+              disableAfter: context.disableAfter,
+            });
           }
-          await usageDAO
-            .insert({
-              id: UUIDUtil.getRandomUUID(),
-              userEmail: req.userEmail,
-              gatewayKeyId: req.gatewayKeyId,
-              providerId: req.providerId,
-              providerKeyId: candidate.id,
-              upstreamModel: req.upstreamModel,
-              promptTokens: 0,
-              completionTokens: 0,
-              latencyMs,
-              statusCode: upstream.status,
-              errorCode: `UPSTREAM_${upstream.status}`,
-              estimated: false,
-              now: TimestampUtil.getCurrentUnixTimestampInSeconds(),
-            })
-            .catch(() => {});
           continue;
         }
-        // Non-retryable 4xx: surface upstream message, no failover.
-        await usageDAO
-          .insert({
-            id: UUIDUtil.getRandomUUID(),
-            userEmail: req.userEmail,
-            gatewayKeyId: req.gatewayKeyId,
-            providerId: req.providerId,
-            providerKeyId: candidate.id,
-            upstreamModel: req.upstreamModel,
-            promptTokens: 0,
-            completionTokens: 0,
-            latencyMs,
-            statusCode: upstream.status,
-            errorCode: `UPSTREAM_${upstream.status}`,
-            estimated: false,
-            now: TimestampUtil.getCurrentUnixTimestampInSeconds(),
-          })
-          .catch(() => {});
-        const error = RouterService.toUpstreamError(req.providerKind, upstream.status, bodyText, lastError, lastAccountRouted);
-        (error as unknown as { statusCode?: number }).statusCode = upstream.status;
-        throw error;
+        // Non-retryable 4xx/5xx: surface upstream message, no failover.
+        throw withStatusCode(
+          toUpstreamError(req.providerKind, outcome.status, outcome.message, lastError, outcome.accountRouted),
+          outcome.status,
+        );
       } catch (error) {
-        if (error instanceof BadRequestError && (error as unknown as { statusCode?: number }).statusCode) throw error;
+        if (error instanceof BadRequestError && (error as { statusCode?: number }).statusCode) throw error;
         // A client disconnect aborts the upstream call; that says nothing about
         // key health, so do not penalize the key with a cooldown.
         if (req.signal?.aborted) throw error;
         const message = error instanceof Error ? error.message : 'Upstream request failed';
         lastError = message.slice(0, 300);
         lastStatus = 502;
-        const failures = candidate.consecutive_failures + 1;
-        const cooldownUntil =
-          TimestampUtil.getCurrentUnixTimestampInSeconds() + Math.ceil(cooldownForFailures(cooldownBase, failures) / 1000);
-        await keyDAO
-          .recordFailure(candidate.id, message.slice(0, 500), cooldownUntil, TimestampUtil.getCurrentUnixTimestampInSeconds())
-          .catch(() => {});
+        // Transient/thrown failures cool the key but do not auto-disable it;
+        // only repeated upstream error statuses count toward disable.
+        await recordKeyFailure(keyDAO, candidate, message, now, {
+          baseMs: context.cooldownBase,
+          disableAfter: Infinity,
+        });
       }
     }
     // lastError carries the final upstream body slice (<=300 chars, no
@@ -540,4 +326,5 @@ class RouterService {
 }
 
 export { RouterService };
-export type { RouterServiceDeps, RouterServiceEnv, ProxyRequest, ProxySuccess, CodexAccessResolver };
+
+export { type CodexAccessResolver, type RouterServiceDeps, type RouterServiceEnv, type ProxySuccess, type ProxyRequest } from './types';

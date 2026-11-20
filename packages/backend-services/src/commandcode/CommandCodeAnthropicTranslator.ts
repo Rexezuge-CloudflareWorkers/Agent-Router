@@ -10,7 +10,6 @@ function mapStopReason(reason: string): string {
 
 class CommandCodeAnthropicTranslator implements CommandCodeTranslator {
   public readonly accumulator = new CommandCodeAccumulator();
-  public readonly contentType = 'text/event-stream';
   private started = false;
   private blockIndex = -1;
   private blockType: 'text' | 'thinking' | 'tool_use' | null = null;

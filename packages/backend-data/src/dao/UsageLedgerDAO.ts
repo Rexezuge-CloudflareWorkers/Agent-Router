@@ -95,24 +95,18 @@ class UsageLedgerDAO extends BaseDAO {
     cursor?: string,
   ): Promise<{ rows: UsageLedgerMetadata[]; nextCursor: string | null }> {
     const since = this.decodeCursor<{ createdAt: string; id: string }>(cursor);
-    let rows: UsageLedgerRow[];
-    if (since) {
-      const result = await this.database
-        .prepare(
-          `SELECT * FROM usage_ledger WHERE lower(user_email) = lower(?)
-           AND (created_at < ? OR (created_at = ? AND id < ?))
-           ORDER BY created_at DESC, id DESC LIMIT ?`,
-        )
-        .bind(userEmail, Number(since.createdAt), Number(since.createdAt), since.id, limit + 1)
-        .all<UsageLedgerRow>();
-      rows = result.results ?? [];
-    } else {
-      const rowsResult = await this.database
-        .prepare(`SELECT * FROM usage_ledger WHERE lower(user_email) = lower(?) ORDER BY created_at DESC, id DESC LIMIT ?`)
-        .bind(userEmail, limit + 1)
-        .all<UsageLedgerRow>();
-      rows = rowsResult.results ?? [];
-    }
+    // Keyset pagination: the cursor repeats the last row's (created_at, id)
+    // so the next page continues strictly below it. One statement covers both
+    // the first page and every subsequent one.
+    const where = since
+      ? 'lower(user_email) = lower(?) AND (created_at < ? OR (created_at = ? AND id < ?))'
+      : 'lower(user_email) = lower(?)';
+    const bindings = since ? [userEmail, Number(since.createdAt), Number(since.createdAt), since.id, limit + 1] : [userEmail, limit + 1];
+    const result = await this.database
+      .prepare(`SELECT * FROM usage_ledger WHERE ${where} ORDER BY created_at DESC, id DESC LIMIT ?`)
+      .bind(...bindings)
+      .all<UsageLedgerRow>();
+    const rows = result.results ?? [];
     const hasMore = rows.length > limit;
     const page = hasMore ? rows.slice(0, limit) : rows;
     const last = page.at(-1);
@@ -160,6 +154,15 @@ class UsageLedgerDAO extends BaseDAO {
     };
   }
 
+  /**
+  Daily token/request series.
+
+  Token and request sums are restricted to successful calls (`status_code < 400`)
+  so a day's token count matches what the provider actually billed. Failures
+  are reported separately by `summarizeByUser.failedRequests` — they carry no
+  tokens, so folding them into this series would inflate request counts for
+  zero-token calls. This asymmetry is intentional, not an oversight.
+  */
   public async summarizeDaily(
     userEmail: string,
     since: number,

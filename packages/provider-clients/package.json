@@ -6,6 +6,9 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./adapters": "./src/adapters/index.ts",
+    "./adapters/*": "./src/adapters/*.ts",
+    "./shared/*": "./src/shared/*.ts",
     "./upstream": "./src/upstream/index.ts",
     "./codex": "./src/codex/index.ts",
     "./commandcode": "./src/commandcode/index.ts",

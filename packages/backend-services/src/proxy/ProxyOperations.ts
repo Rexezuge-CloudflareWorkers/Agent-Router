@@ -19,23 +19,23 @@ interface ProxyCallResult {
   providerKeyId: string;
 }
 
+const COMMAND_CODE_MODEL_PREFIXES = [
+  'deepseek/',
+  'moonshotai/',
+  'zai-org/',
+  'minimaxai/',
+  'qwen/',
+  'stepfun/',
+  'xiaomi/',
+  'google/gemini-',
+];
+
 function inferKind(model: unknown): ProviderKind | null {
   if (typeof model !== 'string') return null;
   const m = model.toLowerCase();
   if (m.startsWith('claude-')) return 'ANTHROPIC';
   if (m.startsWith('gemini-') || m.startsWith('models/gemini-')) return 'GEMINI';
-  if (
-    m.startsWith('deepseek/') ||
-    m.startsWith('moonshotai/') ||
-    m.startsWith('zai-org/') ||
-    m.startsWith('minimaxai/') ||
-    m.startsWith('qwen/') ||
-    m.startsWith('stepfun/') ||
-    m.startsWith('xiaomi/') ||
-    m.startsWith('google/gemini-')
-  ) {
-    return 'COMMAND_CODE';
-  }
+  if (COMMAND_CODE_MODEL_PREFIXES.some((prefix) => m.startsWith(prefix))) return 'COMMAND_CODE';
   return m.startsWith('gpt-') ||
     m.startsWith('o1-') ||
     m.startsWith('o3-') ||
@@ -86,26 +86,29 @@ async function resolveProviderId(
   return { id: fallback.id, kind: fallback.kind, baseUrl: fallback.baseUrl };
 }
 
+/**
+OpenAI-shaped error envelope, the one shape every proxy client parses.
+*/
+function jsonError(message: string, type: string, status: number, headers?: Record<string, string>): Response {
+  return Response.json({ error: { message, type } }, { status, ...(headers && { headers }) });
+}
+
 function errorResponse(error: unknown): Response {
   if (error instanceof RateLimitedError) {
-    return Response.json(
-      { error: { message: error.message, type: 'rate_limit_exceeded', code: 'all_keys_exhausted' } },
-      { status: 429, headers: { 'Retry-After': '30' } },
-    );
+    return jsonError(error.message, 'rate_limit_exceeded', 429, { 'Retry-After': '30' });
   }
   if (error instanceof ServiceError) {
-    const code = error.status;
-    if (code === 400) return Response.json({ error: { message: error.message, type: 'invalid_request_error' } }, { status: 400 });
-    if (code === 404) return Response.json({ error: { message: error.message, type: 'not_found' } }, { status: 404 });
+    if (error.status === 400) return jsonError(error.message, 'invalid_request_error', 400);
+    if (error.status === 404) return jsonError(error.message, 'not_found', 404);
   }
   const statusCode = (error as { statusCode?: number } | null)?.statusCode;
   if (typeof statusCode === 'number' && statusCode >= 400 && statusCode < 600) {
     const message = error instanceof Error ? error.message : 'Upstream error';
-    return Response.json({ error: { message, type: 'upstream_error' } }, { status: statusCode });
+    return jsonError(message, 'upstream_error', statusCode);
   }
   const message = error instanceof Error ? error.message : 'Internal error';
   const status = message.includes('too large') ? 413 : 500;
-  return Response.json({ error: { message: status === 500 ? 'Internal error' : message, type: 'internal_error' } }, { status });
+  return jsonError(status === 500 ? 'Internal error' : message, 'internal_error', status);
 }
 
 function incomingHeaders(request: Request): Record<string, string | undefined> {
@@ -118,9 +121,9 @@ function incomingHeaders(request: Request): Record<string, string | undefined> {
   };
 }
 
-function proxyResponse(result: ProxyCallResult): Response {
+function proxyResponse(result: ProxyCallResult, contentType = result.contentType): Response {
   const headers: Record<string, string> = {
-    'content-type': result.contentType ?? 'application/json',
+    'content-type': contentType ?? 'application/json',
     'x-provider-key-id': result.providerKeyId,
   };
   return new Response(result.bodyStream ?? result.bodyText ?? '', { status: result.status, headers });
@@ -132,35 +135,80 @@ interface ParsedBody {
   bodyBytes: number;
 }
 
-function tooLarge(): Response {
-  return Response.json({ error: { message: 'Request body too large', type: 'invalid_request_error' } }, { status: 413 });
-}
-
 async function readJsonBody(request: Request, maxBytes: number): Promise<ParsedBody | Response> {
   const declared = Number(request.headers.get('content-length') ?? '');
-  if (Number.isFinite(declared) && declared > maxBytes) return tooLarge();
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    return jsonError('Request body too large', 'invalid_request_error', 413);
+  }
   let bytes: Uint8Array;
   try {
     bytes = new Uint8Array(await request.arrayBuffer());
   } catch {
-    return Response.json({ error: { message: 'Invalid JSON body', type: 'invalid_request_error' } }, { status: 400 });
+    return jsonError('Invalid JSON body', 'invalid_request_error', 400);
   }
-  if (bytes.byteLength > maxBytes) return tooLarge();
+  if (bytes.byteLength > maxBytes) return jsonError('Request body too large', 'invalid_request_error', 413);
   const text = new TextDecoder().decode(bytes);
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
-    return Response.json({ error: { message: 'Invalid JSON body', type: 'invalid_request_error' } }, { status: 400 });
+    return jsonError('Invalid JSON body', 'invalid_request_error', 400);
   }
   return !parsed || typeof parsed !== 'object' || Array.isArray(parsed)
-    ? Response.json({ error: { message: 'Invalid JSON body', type: 'invalid_request_error' } }, { status: 400 })
+    ? jsonError('Invalid JSON body', 'invalid_request_error', 400)
     : { text, body: parsed as Record<string, unknown>, bodyBytes: bytes.byteLength };
 }
 
 function bodyLimit(scope: Container): number {
   const config = scope.get(Tokens.AppConfig);
   return Math.max(config.getProxyMaxBodyBytes(), config.getCommandCodeMaxBodyBytes());
+}
+
+function readProviderHeader(request: Request): string | null {
+  return request.headers.get('x-provider-id')?.trim() || null;
+}
+
+/**
+Shared request fields passed to `RouterService.proxy`.
+*/
+interface ProxyEnvelope {
+  userEmail: string;
+  gatewayKeyId: string;
+  providerId: string;
+  providerKind: ProviderKind;
+  providerBaseUrl: string | null;
+  upstreamModel: string | null;
+  bodyBytes: number;
+  rawBodyText: string;
+  clientStream: boolean;
+  incomingHeaders: Record<string, string | undefined>;
+  signal: AbortSignal;
+}
+
+/**
+Resolves the provider for a proxy request and returns its router envelope.
+*/
+function envelopeFor(
+  provider: { id: string; kind: ProviderKind; baseUrl: string | null },
+  request: Request,
+  identity: ProxyIdentity,
+  body: Record<string, unknown>,
+  parsed: ParsedBody,
+  upstreamModel: string | null,
+): ProxyEnvelope {
+  return {
+    userEmail: identity.userEmail,
+    gatewayKeyId: identity.gatewayKeyId,
+    providerId: provider.id,
+    providerKind: provider.kind,
+    providerBaseUrl: provider.baseUrl,
+    upstreamModel,
+    bodyBytes: parsed.bodyBytes,
+    rawBodyText: parsed.text,
+    clientStream: body.stream === true,
+    incomingHeaders: incomingHeaders(request),
+    signal: request.signal,
+  };
 }
 
 async function handleOpenAiProxy(
@@ -175,64 +223,39 @@ async function handleOpenAiProxy(
   if (parsed instanceof Response) return parsed;
   const body = parsed.body;
 
-  const explicitId = request.headers.get('x-provider-id')?.trim() || null;
   let provider: { id: string; kind: ProviderKind; baseUrl: string | null };
   try {
-    provider = await resolveProviderId(scope, identity.userEmail, { kind: inferKind(body.model) ?? 'OPENAI', explicitId });
+    provider = await resolveProviderId(scope, identity.userEmail, {
+      kind: inferKind(body.model) ?? 'OPENAI',
+      explicitId: readProviderHeader(request),
+    });
   } catch (error) {
     return errorResponse(error);
   }
   if (provider.kind === 'ANTHROPIC' || provider.kind === 'GEMINI') {
     const suffix = provider.kind === 'ANTHROPIC' ? 'anthropic' : 'gemini';
-    return Response.json(
-      {
-        error: {
-          message: `Model routes to ${provider.kind}; use the/${suffix}/* endpoint or set x-provider-id`,
-          type: 'invalid_request_error',
-        },
-      },
-      { status: 400 },
-    );
+    return jsonError(`Model routes to ${provider.kind}; use the/${suffix}/* endpoint or set x-provider-id`, 'invalid_request_error', 400);
   }
   // Codex OAuth (ChatGPT subscription) tokens are honored by the Codex
   // backend, which serves the Responses API — not platform chat/embeddings.
   // Fail fast with guidance instead of 429ing upstream and cooling the key.
   if (upstreamPath !== '/responses' && provider.kind === 'OPENAI_CODEX') {
-    return Response.json(
-      {
-        error: {
-          message:
-            'Codex OAuth providers only support POST /v1/responses with a Codex model; add an OPENAI provider for chat completions or embeddings',
-          type: 'invalid_request_error',
-        },
-      },
-      { status: 400 },
+    return jsonError(
+      'Codex OAuth providers only support POST /v1/responses with a Codex model; add an OPENAI provider for chat completions or embeddings',
+      'invalid_request_error',
+      400,
     );
   }
   // Command Code only serves chat/responses traffic, not embeddings.
   if (upstreamPath === '/embeddings' && provider.kind === 'COMMAND_CODE') {
-    return Response.json(
-      { error: { message: 'Command Code providers do not support embeddings', type: 'invalid_request_error' } },
-      { status: 400 },
-    );
+    return jsonError('Command Code providers do not support embeddings', 'invalid_request_error', 400);
   }
   try {
-    const router = scope.get(Tokens.RouterService);
-    const result = await router.proxy({
-      userEmail: identity.userEmail,
-      gatewayKeyId: identity.gatewayKeyId,
-      providerId: provider.id,
-      providerKind: provider.kind,
-      providerBaseUrl: provider.baseUrl,
+    const result = await scope.get(Tokens.RouterService).proxy({
+      ...envelopeFor(provider, request, identity, body, parsed, typeof body.model === 'string' ? body.model : null),
       upstreamPath,
       upstreamBody: body,
-      upstreamModel: typeof body.model === 'string' ? body.model : null,
-      bodyBytes: parsed.bodyBytes,
-      rawBodyText: parsed.text,
       clientEndpoint: upstreamPath === '/responses' ? 'responses' : 'chat',
-      clientStream: body.stream === true,
-      incomingHeaders: incomingHeaders(request),
-      signal: request.signal,
     });
     return proxyResponse(result);
   } catch (error) {
@@ -251,36 +274,21 @@ async function handleAnthropicProxy(
   if (parsed instanceof Response) return parsed;
   const body = parsed.body;
 
-  const explicitId = request.headers.get('x-provider-id')?.trim() || null;
   let provider: { id: string; kind: ProviderKind; baseUrl: string | null };
   try {
-    provider = await resolveProviderId(scope, identity.userEmail, { kind: 'ANTHROPIC', explicitId });
+    provider = await resolveProviderId(scope, identity.userEmail, { kind: 'ANTHROPIC', explicitId: readProviderHeader(request) });
   } catch (error) {
     return errorResponse(error);
   }
   if (provider.kind !== 'ANTHROPIC' && provider.kind !== 'COMMAND_CODE') {
-    return Response.json(
-      { error: { message: 'Resolved provider is not Anthropic; set x-provider-id', type: 'invalid_request_error' } },
-      { status: 400 },
-    );
+    return jsonError('Resolved provider is not Anthropic; set x-provider-id', 'invalid_request_error', 400);
   }
   try {
-    const router = scope.get(Tokens.RouterService);
-    const result = await router.proxy({
-      userEmail: identity.userEmail,
-      gatewayKeyId: identity.gatewayKeyId,
-      providerId: provider.id,
-      providerKind: provider.kind,
-      providerBaseUrl: provider.baseUrl,
+    const result = await scope.get(Tokens.RouterService).proxy({
+      ...envelopeFor(provider, request, identity, body, parsed, typeof body.model === 'string' ? body.model : null),
       upstreamPath: '/v1/messages',
       upstreamBody: body,
-      upstreamModel: typeof body.model === 'string' ? body.model : null,
-      bodyBytes: parsed.bodyBytes,
-      rawBodyText: parsed.text,
       clientEndpoint: 'anthropic',
-      clientStream: body.stream === true,
-      incomingHeaders: incomingHeaders(request),
-      signal: request.signal,
     });
     return proxyResponse(result);
   } catch (error) {
@@ -297,47 +305,31 @@ async function handleGeminiProxy(
 ): Promise<Response> {
   const match = /^(models\/[^:]+):(generateContent|streamGenerateContent)$/.exec(action);
   if (!match) {
-    return Response.json(
-      { error: { message: 'Path must be /gemini/v1beta/models/<model>:generateContent', type: 'invalid_request_error' } },
-      { status: 404 },
-    );
+    return jsonError('Path must be /gemini/v1beta/models/<model>:generateContent', 'invalid_request_error', 404);
   }
   const scope = scopeFactory(env);
   const parsed = await readJsonBody(request, bodyLimit(scope));
   if (parsed instanceof Response) return parsed;
   const body = parsed.body;
 
-  const explicitId = request.headers.get('x-provider-id')?.trim() || null;
   let provider: { id: string; kind: ProviderKind; baseUrl: string | null };
   try {
-    provider = await resolveProviderId(scope, identity.userEmail, { kind: 'GEMINI', explicitId });
+    provider = await resolveProviderId(scope, identity.userEmail, { kind: 'GEMINI', explicitId: readProviderHeader(request) });
   } catch (error) {
     return errorResponse(error);
   }
   if (provider.kind !== 'GEMINI') {
-    return Response.json(
-      { error: { message: 'Resolved provider is not Gemini; set x-provider-id', type: 'invalid_request_error' } },
-      { status: 400 },
-    );
+    return jsonError('Resolved provider is not Gemini; set x-provider-id', 'invalid_request_error', 400);
   }
   try {
-    const router = scope.get(Tokens.RouterService);
-    const result = await router.proxy({
-      userEmail: identity.userEmail,
-      gatewayKeyId: identity.gatewayKeyId,
-      providerId: provider.id,
-      providerKind: 'GEMINI',
-      providerBaseUrl: provider.baseUrl,
+    const result = await scope.get(Tokens.RouterService).proxy({
+      ...envelopeFor(provider, request, identity, body, parsed, match[1]),
       upstreamPath: `/v1beta/${match[1]}:${match[2]}`,
       upstreamBody: body,
-      upstreamModel: match[1],
-      bodyBytes: parsed.bodyBytes,
-      rawBodyText: parsed.text,
     });
-    return new Response(result.bodyText, {
-      status: result.status,
-      headers: { 'content-type': 'application/json', 'x-provider-key-id': result.providerKeyId },
-    });
+    // Gemini responses are always JSON; relay both buffered and streaming
+    // bodies through the shared path rather than dropping a stream here.
+    return proxyResponse(result, 'application/json');
   } catch (error) {
     return errorResponse(error);
   }
