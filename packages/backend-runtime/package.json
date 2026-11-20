@@ -13,9 +13,7 @@
     "./constants": "./src/constants/index.ts",
     "./constants/*": "./src/constants/*.ts",
     "./di": "./src/di/index.ts",
-    "./di/*": "./src/di/*.ts",
-    "./logger": "./src/logger.ts",
-    "./cache": "./src/cache.ts"
+    "./di/*": "./src/di/*.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

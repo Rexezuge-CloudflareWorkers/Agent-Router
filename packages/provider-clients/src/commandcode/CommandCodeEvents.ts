@@ -1,4 +1,5 @@
 import type { CommandCodeEvent, CommandCodeMappedError, CommandCodeUsage } from './CommandCodeTypes';
+import { COMMAND_CODE_RETRYABLE_STATUSES } from '../shared/retryable';
 
 const CC_STATUS_MAP: Record<number, { status: number; type: string }> = {
   400: { status: 400, type: 'invalid_request_error' },
@@ -13,7 +14,7 @@ const CC_STATUS_MAP: Record<number, { status: number; type: string }> = {
   503: { status: 503, type: 'temporarily_unavailable' },
 };
 
-const RETRYABLE = new Set([429, 502, 503]);
+const RETRYABLE = COMMAND_CODE_RETRYABLE_STATUSES;
 
 function mapFinishReason(reason: unknown): string {
   const value = (typeof reason === 'string' ? reason : '').trim().toLowerCase();

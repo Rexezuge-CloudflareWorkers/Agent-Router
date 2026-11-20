@@ -1,15 +1,5 @@
 /* eslint-disable unicorn/prefer-switch -- else-if chains avoid break-in-nested-loop */
-function asRecord(value: unknown): Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
-}
-
-function asArray(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
-}
-
-function asString(value: unknown): string {
-  return typeof value === 'string' ? value : '';
-}
+import { asArray, asRecord, asString, asText } from '@agent-router/provider-clients/shared/coercion';
 
 function textOfContent(content: unknown): string {
   if (typeof content === 'string') return content;
@@ -20,11 +10,6 @@ function textOfContent(content: unknown): string {
       return typeof record.text === 'string' ? record.text : '';
     })
     .join('');
-}
-
-function asText(value: unknown): string {
-  if (typeof value === 'string') return value;
-  return value === null || value === undefined ? '' : JSON.stringify(value);
 }
 
 function imagePart(url: string, detail?: string): Record<string, unknown> {

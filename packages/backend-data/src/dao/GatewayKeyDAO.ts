@@ -68,14 +68,6 @@ class GatewayKeyDAO extends BaseDAO {
     return (result.results ?? []).map(toMetadata);
   }
 
-  public async countActiveByUser(userEmail: string): Promise<number> {
-    const row = await this.database
-      .prepare(`SELECT COUNT(*) AS count FROM gateway_keys WHERE lower(user_email) = lower(?) AND status = 'active'`)
-      .bind(userEmail)
-      .first<{ count: number }>();
-    return row?.count ?? 0;
-  }
-
   public async touchLastUsed(keyHash: string, now: number): Promise<void> {
     await this.run(
       () => this.database.prepare('UPDATE gateway_keys SET last_used_at = ? WHERE key_hash = ?').bind(now, keyHash).run(),

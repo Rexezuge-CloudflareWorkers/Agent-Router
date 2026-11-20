@@ -46,6 +46,10 @@ class AgentRouterWorker extends AbstractEntrypointWorker {
     registerProxyRoutes(app);
 
     app.use('/user/*', MiddlewareHandlers.userAuthentication());
+    // The generated OpenAPI docs are user-facing too; without this they would
+    // be the one authenticated-looking surface open to the internet.
+    app.use('/docs', MiddlewareHandlers.userAuthentication());
+    app.use('/docs/*', MiddlewareHandlers.userAuthentication());
     app.use('/user/gateway-keys*', rateLimit({ windowMs: 60_000, max: 30, keyPrefix: 'gateway-keys' }));
     app.use('/user/providers*', rateLimit({ windowMs: 60_000, max: 60, keyPrefix: 'providers' }));
 

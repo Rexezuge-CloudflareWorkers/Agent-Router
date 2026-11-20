@@ -7,7 +7,6 @@ import type {
   UsageLedgerDAO,
   UserDAO,
 } from '@agent-router/backend-data/dao';
-import type { D1Queryable } from '@rexezuge/d1';
 import type { Token } from '@agent-router/backend-runtime/di';
 import type { AppConfiguration } from '@agent-router/backend-runtime/config';
 import type { AccessAuthService } from '../auth/AccessAuthService';
@@ -21,22 +20,7 @@ import type { RouterService } from '../router/RouterService';
 import type { UsageService } from '../usage/UsageService';
 import type { UserService } from '../user/UserService';
 
-interface RequestScopeEnvShape {
-  DB: D1Queryable;
-  PROVIDER_KEYS_ENCRYPTION_SECRET?: { get(): Promise<string> };
-  CODEX_OAUTH_ENCRYPTION_SECRET?: { get(): Promise<string> };
-  COMMAND_CODE_FINGERPRINT_SALT?: { get(): Promise<string> };
-}
-
-interface RequestKeysShape {
-  providerKeysKey: string;
-  codexOAuthKey: string;
-}
-
 const Tokens = {
-  Env: Symbol('Env') as Token<RequestScopeEnvShape>,
-  Db: Symbol('Db') as Token<D1Queryable>,
-  Keys: Symbol('Keys') as Token<() => Promise<RequestKeysShape>>,
   AppConfig: Symbol('AppConfig') as Token<AppConfiguration>,
   UserDAO: Symbol('UserDAO') as Token<() => Promise<UserDAO>>,
   GatewayKeyDAO: Symbol('GatewayKeyDAO') as Token<() => Promise<GatewayKeyDAO>>,

@@ -79,7 +79,7 @@ class CodexTokenService {
     const now = TimestampUtil.getCurrentUnixTimestampInSeconds();
     const threshold = now + this.deps.config.getCodexAccessMinValidSeconds();
     const keyDAO = await this.deps.providerKeyDAO();
-    const candidates = await keyDAO.listOAuthRefreshCandidates(now, threshold, limit).catch(() => []);
+    const candidates = await keyDAO.listOAuthRefreshCandidates(threshold, limit).catch(() => []);
     let refreshed = 0;
     let revoked = 0;
     for (const candidate of candidates) {

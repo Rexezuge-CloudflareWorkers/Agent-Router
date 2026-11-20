@@ -265,4 +265,53 @@ describe('RouterService failover', () => {
     ).rejects.toThrow(/aborted/i);
     expect(events).not.toContain('failure:k1');
   });
+
+  it('disables a Command Code key at the failure threshold, matching the standard path', async () => {
+    // consecutive_failures is one below KEY_MAX_CONSECUTIVE_FAILURES (10), so a
+    // single retryable 502 crosses the threshold and must set status=disabled.
+    const k1 = row('k1', { consecutive_failures: 9 });
+    k1.encrypted_key = await enc('user_key');
+    const events: string[] = [];
+    const fetchImpl = vi.fn(async () => jsonResponse(200, {}));
+    const keyDAO = {
+      listSelectableByProvider: async () => [k1],
+      getById: async () => k1,
+      recordSuccess: async () => {},
+      recordFailure: async (id: string) => void events.push(`failure:${id}`),
+      markDegraded: async (id: string) => void events.push(`degraded:${id}`),
+      markExhausted: async () => {},
+      disable: async (id: string) => void events.push(`disabled:${id}`),
+    };
+    const env = { DB: {} as never, PROVIDER_KEYS_ENCRYPTION_SECRET: { get: async () => MASTER }, KEY_MAX_CONSECUTIVE_FAILURES: '10' };
+    const commandCode = {
+      ensureInitialized: async () => {},
+      call: async () => ({ ok: false, status: 502, message: 'Upstream flaked', retryable: true, code: null }),
+    };
+    const svc = new RouterService(env, {
+      providerDAO: () =>
+        Promise.resolve({ getById: async () => ({ id: 'p1', user_email: 'u@x.y', userEmail: 'u@x.y', status: 'active' }) } as never),
+      providerKeyDAO: () => Promise.resolve(keyDAO as never),
+      usageDAO: () => Promise.resolve({ insert: async () => {} } as never),
+      masterKey: async () => MASTER,
+      config: AppConfiguration.fromEnv(env),
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      commandCode: commandCode as never,
+    });
+    await expect(
+      svc.proxy({
+        userEmail: 'u@x.y',
+        gatewayKeyId: 'gw1',
+        providerId: 'p1',
+        providerKind: 'COMMAND_CODE',
+        providerBaseUrl: 'https://api.commandcode.ai',
+        upstreamPath: '/alpha/generate',
+        upstreamBody: { model: 'x', messages: [] },
+        upstreamModel: 'x',
+        bodyBytes: 10,
+        clientEndpoint: 'chat',
+      }),
+    ).rejects.toThrow();
+    expect(events).toContain('failure:k1');
+    expect(events).toContain('disabled:k1');
+  });
 });

@@ -3,7 +3,6 @@ import type { CommandCodeEvent, CommandCodeMappedError } from '@agent-router/pro
 
 interface CommandCodeTranslator {
   readonly accumulator: CommandCodeAccumulator;
-  readonly contentType: string;
   feed(event: CommandCodeEvent): string[];
   finalize(): string[];
   finalJson(): Record<string, unknown>;

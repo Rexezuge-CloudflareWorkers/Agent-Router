@@ -16,6 +16,10 @@ class CronTasksWorker extends DurableObject<Env> {
       return new Response('Already running', { status: 202 });
     }
     const body = (await request.json().catch(() => ({}))) as { cron?: string; scheduledTime?: number };
+    // Kick the sweep off and return immediately: the whole cron run can take
+    // longer than a single fetch should stay open. `ctx.waitUntil` keeps the
+    // isolate alive until the promise settles, and the single-flight guard
+    // prevents overlapping sweeps from stacking.
     this.currentRun = runScheduledTasks(this.env, body.cron ?? '', body.scheduledTime ?? Date.now())
       .catch((error: unknown) => {
         logger.error('Cron run failed', error);
@@ -23,9 +27,7 @@ class CronTasksWorker extends DurableObject<Env> {
       .finally(() => {
         this.currentRun = null;
       });
-    // Don't await here; DO will keep running via waitUntil semantics of the caller.
-    // For scheduled() path we await explicitly.
-    await this.currentRun;
+    this.ctx.waitUntil(this.currentRun);
     return Response.json({ ok: true });
   }
 }

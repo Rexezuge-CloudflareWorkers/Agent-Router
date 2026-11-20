@@ -1,6 +1,5 @@
 import type { Container } from '@rexezuge/runtime';
-import { createServiceContext } from './ServiceContext';
-import type { ServiceContext, ServiceContextOverrides } from './ServiceContext';
+import type { ServiceContext } from './ServiceContext';
 import type { ServiceEnv } from '../config/ServiceEnv';
 
 /**
@@ -26,8 +25,8 @@ interface ScopedContext {
   readonly env: ServiceEnv;
 }
 
-const SCOPE_KEY = '__edgeGitScope';
-const SERVICE_CONTEXT_KEY = '__edgeGitServiceContext';
+const SCOPE_KEY = '__agentRouterScope';
+const SERVICE_CONTEXT_KEY = '__agentRouterServiceContext';
 
 function setRequestScope(c: ScopedContext, scope: Container, ctx: ServiceContext): void {
   c.set(SCOPE_KEY, scope);
@@ -40,15 +39,5 @@ function getRequestScope(c: ScopedContext): Container {
   return scope;
 }
 
-function getServiceContext(c: ScopedContext): ServiceContext {
-  const ctx = c.get(SERVICE_CONTEXT_KEY) as ServiceContext | undefined;
-  if (!ctx) throw new Error('Service context is not set. Register scopeMiddleware before routes.');
-  return ctx;
-}
-
-function createRequestContext(env: ServiceEnv, overrides: ServiceContextOverrides = {}): ServiceContext {
-  return createServiceContext(env, overrides);
-}
-
-export { memoizeAsync, setRequestScope, getRequestScope, getServiceContext, createRequestContext, SCOPE_KEY, SERVICE_CONTEXT_KEY };
+export { memoizeAsync, setRequestScope, getRequestScope, SCOPE_KEY, SERVICE_CONTEXT_KEY };
 export type { ScopedContext };

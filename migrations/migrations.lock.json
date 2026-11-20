@@ -16,6 +16,10 @@
     {
       "name": "0004_command_code.sql",
       "sha256": "d4f0576c61d969425f37076006a5f57b57537277c09581a584e70f2518c4773a"
+    },
+    {
+      "name": "0005_drop_codex_oauth_sessions.sql",
+      "sha256": "f93c10cc1d45136dda2db36f45ace3ce6c6f3e4f437e33f9c21cb195571aef74"
     }
   ]
 }

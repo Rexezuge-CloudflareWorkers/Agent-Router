@@ -5,7 +5,6 @@ import type { CommandCodeEvent, CommandCodeMappedError } from '@agent-router/pro
 
 class CommandCodeResponsesTranslator implements CommandCodeTranslator {
   public readonly accumulator = new CommandCodeAccumulator();
-  public readonly contentType = 'text/event-stream';
   private started = false;
   private messageItemAdded = false;
   private reasoningItemAdded = false;

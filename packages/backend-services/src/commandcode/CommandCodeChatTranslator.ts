@@ -5,7 +5,6 @@ import type { CommandCodeEvent, CommandCodeMappedError } from '@agent-router/pro
 
 class CommandCodeChatTranslator implements CommandCodeTranslator {
   public readonly accumulator = new CommandCodeAccumulator();
-  public readonly contentType = 'text/event-stream';
   private chunkIndex = 0;
   private finishEmitted = false;
 

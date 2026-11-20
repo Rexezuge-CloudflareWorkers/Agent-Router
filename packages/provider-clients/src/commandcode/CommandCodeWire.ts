@@ -1,3 +1,5 @@
+import { asArray, asRecord, asString, asText } from '../shared/coercion';
+
 interface WireOptions {
   protocolVersion: string;
   deviceProjectDir: string;
@@ -9,23 +11,6 @@ interface WireOptions {
 
 const FALLBACK_MODEL = 'deepseek/deepseek-v4-flash';
 const MAX_TOKENS_CAP = 200_000;
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
-}
-
-function asArray(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
-}
-
-function asString(value: unknown): string {
-  return typeof value === 'string' ? value : '';
-}
-
-function asText(value: unknown): string {
-  if (typeof value === 'string') return value;
-  return value === null || value === undefined ? '' : JSON.stringify(value);
-}
 
 function slugifyProjectPath(path: string): string {
   return (
