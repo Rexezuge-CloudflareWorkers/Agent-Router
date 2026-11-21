@@ -117,6 +117,15 @@ describe('UpstreamClient', () => {
     expect(extractHtmlPageText(html)).toBe('Just a moment');
   });
 
+  it('drops script and style bodies whose end tags carry attributes', () => {
+    const html = [
+      '<html><head><style>body{color:red}</style foo="bar"></head><body>',
+      '<script>alert(1)</script\t\n bar><p>Just a moment</p>',
+      '</body></html>',
+    ].join('');
+    expect(extractHtmlPageText(html)).toBe('Just a moment');
+  });
+
   it('does not treat script-like tag names as script blocks', () => {
     expect(extractHtmlPageText('<scriptx>keep me</scriptx>')).toBe('keep me');
   });
