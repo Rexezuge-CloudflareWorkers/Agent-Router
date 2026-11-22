@@ -62,22 +62,31 @@ function deviceFetchStub(
   return vi.fn(async (url: unknown) => {
     const defaultFallback = { status: 403, body: {} };
     const target = String(url);
-    const pick = (entry?: Error | { status: number; body: unknown }, fallback: { status: number; body: unknown } = defaultFallback) => {
+    const pick = ({
+      entry,
+      fallback = defaultFallback,
+    }: { entry?: Error | { status: number; body: unknown }; fallback?: { status: number; body: unknown } } = {}) => {
       const chosen = entry ?? fallback;
       if (chosen instanceof Error) throw chosen;
       return jsonResponse(chosen.body, chosen.status);
     };
     if (target.includes('/deviceauth/usercode')) {
-      return pick(opts.usercode, {
-        status: 200,
-        body: { device_auth_id: 'da-1', user_code: 'ABCD-1234', interval: '5', expires_at: new Date(Date.now() + 900_000).toISOString() },
+      return pick({
+        entry: opts.usercode,
+        fallback: {
+          status: 200,
+          body: { device_auth_id: 'da-1', user_code: 'ABCD-1234', interval: '5', expires_at: new Date(Date.now() + 900_000).toISOString() },
+        },
       });
     }
-    if (target.includes('/deviceauth/token')) return pick(opts.deviceToken);
+    if (target.includes('/deviceauth/token')) return pick({ entry: opts.deviceToken });
     if (target.includes('/oauth/token')) {
-      return pick(opts.oauthToken, {
-        status: 200,
-        body: { access_token: 'at-1', refresh_token: 'rt-1', id_token: jwtWithPayload({ account_id: 'acc-9' }), expires_in: 3600 },
+      return pick({
+        entry: opts.oauthToken,
+        fallback: {
+          status: 200,
+          body: { access_token: 'at-1', refresh_token: 'rt-1', id_token: jwtWithPayload({ account_id: 'acc-9' }), expires_in: 3600 },
+        },
       });
     }
     if (target.includes('/oauth/revoke')) {

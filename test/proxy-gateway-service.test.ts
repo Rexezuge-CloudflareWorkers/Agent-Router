@@ -9,9 +9,9 @@ const CONTINUE_PREFERENCE = { mode: 'continue', fallbackModel: null };
 
 function scopeWith(
   proxy: (input: Record<string, unknown>) => Promise<unknown>,
-  provider?: Record<string, unknown>,
-  preference?: { mode: string; fallbackModel: string | null },
+  opts: { provider?: Record<string, unknown>; preference?: { mode: string; fallbackModel: string | null } } = {},
 ): never {
+  const { provider, preference } = opts;
   const resolvedProvider = provider ?? { id: 'p1', kind: 'OPENAI', status: 'active', baseUrl: null, name: 'p1' };
   const resolvedPreference = preference ?? CONTINUE_PREFERENCE;
   return {
@@ -111,7 +111,7 @@ describe('proxy operations', () => {
     }));
     const anthropic = { id: 'p1', kind: 'ANTHROPIC', status: 'active', baseUrl: null, name: 'p1' };
     const body = '{"model":"claude-sonnet-4","max_tokens":16}';
-    const response = await handleAnthropicProxy({} as never, request(body), identity, () => scopeWith(proxy, anthropic));
+    const response = await handleAnthropicProxy({} as never, request(body), identity, () => scopeWith(proxy, { provider: anthropic }));
     expect(response.status).toBe(200);
     const input = proxy.mock.calls[0]?.[0] as unknown as Record<string, unknown>;
     expect(input.clientEndpoint).toBe('anthropic');
@@ -126,7 +126,7 @@ describe('proxy operations', () => {
     preference: { mode: string; fallbackModel: string | null },
   ) {
     const commandCode = { id: 'p1', kind: 'COMMAND_CODE', status: 'active', baseUrl: null, name: 'p1' };
-    return scopeWith(proxy, commandCode, preference);
+    return scopeWith(proxy, { provider: commandCode, preference });
   }
 
   it('rejects a peak model during peak hours when the user prefers reject', async () => {

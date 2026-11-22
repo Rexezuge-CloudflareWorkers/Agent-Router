@@ -40,15 +40,30 @@ export function resolveLocale(lng?: string | null): string {
   return 'en';
 }
 
-export function formatDateLocale(date: Date, lng?: string | null, options?: Intl.DateTimeFormatOptions): string {
-  return date.toLocaleDateString(resolveLocale(lng), options);
+export interface LocaleDateOptions extends Intl.DateTimeFormatOptions {
+  lng?: string | null;
 }
 
-export function formatTimeLocale(date: Date, lng?: string | null, options?: Intl.DateTimeFormatOptions): string {
-  return date.toLocaleTimeString(resolveLocale(lng), options);
+export function formatDateLocale(date: Date, options: LocaleDateOptions = {}): string {
+  const { lng, ...intlOptions } = options;
+  return date.toLocaleDateString(resolveLocale(lng), intlOptions);
 }
 
-export function formatNumberLocale(value: number, lng?: string | null, options?: Intl.NumberFormatOptions): string {
+export interface LocaleTimeOptions extends Intl.DateTimeFormatOptions {
+  lng?: string | null;
+}
+
+export function formatTimeLocale(date: Date, options: LocaleTimeOptions = {}): string {
+  const { lng, ...intlOptions } = options;
+  return date.toLocaleTimeString(resolveLocale(lng), intlOptions);
+}
+
+export interface LocaleNumberFormatOptions extends Intl.NumberFormatOptions {
+  lng?: string | null;
+}
+
+export function formatNumberLocale(value: number, options: LocaleNumberFormatOptions = {}): string {
+  const { lng, ...intlOptions } = options;
   const tag = resolveLocale(lng);
-  return options === undefined ? value.toLocaleString(tag) : value.toLocaleString(tag, options);
+  return value.toLocaleString(tag, intlOptions);
 }
