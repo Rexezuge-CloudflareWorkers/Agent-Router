@@ -9,6 +9,7 @@ import { Badge, StatusBadge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { ConfirmDialog } from '../components/modals/ConfirmDeleteModal';
+import { GatewayKeyPeakSettingsDialog } from '../components/modals/GatewayKeyPeakSettingsDialog';
 import { ModalHeader, ModalShell } from '../components/modals/ModalShell';
 import { Field, Input } from '../components/ui/Input';
 import { SkeletonRows } from '../components/ui/Skeleton';
@@ -25,6 +26,7 @@ export function GatewayKeysView({ showNotice }: { showNotice: (type: 'success' |
   const [name, setName] = useState('');
   const [created, setCreated] = useState<CreatedGatewayKey | null>(null);
   const [pendingRevoke, setPendingRevoke] = useState<GatewayKey | null>(null);
+  const [peakKey, setPeakKey] = useState<GatewayKey | null>(null);
 
   const reload = async () => {
     try {
@@ -165,11 +167,21 @@ export function GatewayKeysView({ showNotice }: { showNotice: (type: 'success' |
                     <TD className="whitespace-nowrap text-xs">{formatExpiryTimestamp(key.expiresAt)}</TD>
                     <TD className="whitespace-nowrap text-xs">{formatTimestamp(key.lastUsedAt)}</TD>
                     <TD align="right">
-                      {key.status === 'active' && (
-                        <Button variant="ghost" size="sm" className="text-[var(--color-error-text)]" onClick={() => setPendingRevoke(key)}>
-                          {t('common.revoke', 'Revoke')}
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => setPeakKey(key)}>
+                          {t('keys.peakAction', 'Peak Hours')}
                         </Button>
-                      )}
+                        {key.status === 'active' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-[var(--color-error-text)]"
+                            onClick={() => setPendingRevoke(key)}
+                          >
+                            {t('common.revoke', 'Revoke')}
+                          </Button>
+                        )}
+                      </div>
                     </TD>
                   </TR>
                 ))}
@@ -210,6 +222,8 @@ export function GatewayKeysView({ showNotice }: { showNotice: (type: 'success' |
           </div>
         </ModalShell>
       )}
+
+      {peakKey && <GatewayKeyPeakSettingsDialog gatewayKey={peakKey} showNotice={showNotice} onClose={() => setPeakKey(null)} />}
 
       {pendingRevoke && (
         <ConfirmDialog

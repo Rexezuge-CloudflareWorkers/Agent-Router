@@ -224,7 +224,7 @@ async function handleOpenAiProxy(
   if (parsed instanceof Response) return parsed;
   const body = parsed.body;
 
-  const decision = await applyPeakPolicy(scope, identity.userEmail, typeof body.model === 'string' ? body.model : null);
+  const decision = await applyPeakPolicy(scope, identity.gatewayKeyId, typeof body.model === 'string' ? body.model : null);
   if (decision.action === 'reject') return decision.response;
   if (decision.action === 'rewrite') body.model = decision.model;
 
@@ -281,7 +281,7 @@ async function handleAnthropicProxy(
 
   // The Anthropic surface also accepts Command Code providers, so a rewritten
   // fallback model (e.g. deepseek/* -> moonshotai/*) still routes correctly.
-  const decision = await applyPeakPolicy(scope, identity.userEmail, typeof body.model === 'string' ? body.model : null);
+  const decision = await applyPeakPolicy(scope, identity.gatewayKeyId, typeof body.model === 'string' ? body.model : null);
   if (decision.action === 'reject') return decision.response;
   if (decision.action === 'rewrite') body.model = decision.model;
 
@@ -326,7 +326,7 @@ async function handleGeminiProxy(
   // Gemini carries the model in the path, not the body. A fallback used here
   // must itself be a Gemini model, since only a GEMINI provider can serve it.
   let model = match[1];
-  const decision = await applyPeakPolicy(scope, identity.userEmail, model.replace(/^models\//, ''));
+  const decision = await applyPeakPolicy(scope, identity.gatewayKeyId, model.replace(/^models\//, ''));
   if (decision.action === 'reject') return decision.response;
   if (decision.action === 'rewrite') {
     model = decision.model;

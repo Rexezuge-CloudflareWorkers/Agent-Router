@@ -24,6 +24,10 @@
     {
       "name": "0006_user_peak_preferences.sql",
       "sha256": "4bba4d525660ba121d16b78788c18b18ee47a7577cd9d8588840e20ba085799f"
+    },
+    {
+      "name": "0007_gateway_key_peak_preferences.sql",
+      "sha256": "540e6c6f91e71de06780aa7ac96c91e79ec3a1da92761c08789a3fb9b3fb437d"
     }
   ]
 }

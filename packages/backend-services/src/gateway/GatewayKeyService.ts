@@ -1,7 +1,8 @@
-import { GatewayKeyDAO, UserDAO } from '@agent-router/backend-data/dao';
+import { GatewayKeyDAO, GatewayKeyPeakPreferenceDAO, UserDAO } from '@agent-router/backend-data/dao';
 import type { D1Queryable } from '@rexezuge/d1';
 import { BadRequestError, NotFoundError, UnauthorizedError } from '@rexezuge/errors';
-import type { GatewayKeyMetadata } from '@agent-router/shared';
+import type { GatewayKeyMetadata, PeakPreferenceMode } from '@agent-router/shared';
+import { PEAK_SCHEDULES, isPeakNow, isPeakPreferenceMode } from '@agent-router/shared';
 import { CryptoUtil, TimestampUtil, UUIDUtil } from '@rexezuge/shared';
 import { AppConfiguration } from '@agent-router/backend-runtime/config';
 
@@ -13,6 +14,7 @@ interface GatewayKeyServiceEnv {
 
 interface GatewayKeyServiceDeps {
   gatewayKeyDAO?: () => Promise<GatewayKeyDAO>;
+  peakPreferenceDAO?: () => Promise<GatewayKeyPeakPreferenceDAO>;
   userDAO?: () => Promise<UserDAO>;
   config?: AppConfiguration;
 }
@@ -30,6 +32,23 @@ interface AuthenticatedGatewayKey {
   keyId: string;
 }
 
+interface PeakPreference {
+  mode: PeakPreferenceMode;
+  fallbackModel: string | null;
+}
+
+interface PeakPreferenceStatus extends PeakPreference {
+  isPeak: boolean;
+  activeModelFamilies: string[];
+}
+
+const DEFAULT_PEAK_PREFERENCE: PeakPreference = { mode: 'continue', fallbackModel: null };
+const MAX_FALLBACK_MODEL_LENGTH = 200;
+
+function modelFamilies(): string[] {
+  return PEAK_SCHEDULES.flatMap((schedule) => schedule.modelPrefixes.map((prefix) => prefix.replace(/\/$/, '')));
+}
+
 function keyPrefixOf(key: string): string {
   return key.slice(0, 8);
 }
@@ -44,6 +63,7 @@ class GatewayKeyService {
     const config = deps.config ?? AppConfiguration.fromEnv(env);
     this.deps = {
       gatewayKeyDAO: () => Promise.resolve(new GatewayKeyDAO(env.DB)),
+      peakPreferenceDAO: () => Promise.resolve(new GatewayKeyPeakPreferenceDAO(env.DB)),
       userDAO: () => Promise.resolve(new UserDAO(env.DB)),
       config,
       ...deps,
@@ -128,6 +148,54 @@ class GatewayKeyService {
     if (remaining.every((k) => k.keyId !== keyId)) throw new NotFoundError('Gateway key not found');
   }
 
+  /**
+  Used by the proxy path: the key id is already authenticated there, so the
+  policy is looked up by key alone. No row means the default `continue`.
+  */
+  public async getPeakPreference(keyId: string): Promise<PeakPreference> {
+    const row = await (await this.deps.peakPreferenceDAO()).getByKeyId(keyId);
+    if (!row) return { ...DEFAULT_PEAK_PREFERENCE };
+    const mode = isPeakPreferenceMode(row.mode) ? row.mode : DEFAULT_PEAK_PREFERENCE.mode;
+    return { mode, fallbackModel: mode === 'fallback' ? row.fallback_model : null };
+  }
+
+  public async getPeakStatus(keyId: string, userEmail: string, at: Date = new Date()): Promise<PeakPreferenceStatus> {
+    await this.assertOwnership(keyId, userEmail);
+    const preference = await this.getPeakPreference(keyId);
+    return {
+      ...preference,
+      isPeak: PEAK_SCHEDULES.some((schedule) => isPeakNow(schedule, at)),
+      activeModelFamilies: modelFamilies(),
+    };
+  }
+
+  public async updatePeakPreference(keyId: string, userEmail: string, input: unknown): Promise<PeakPreference> {
+    const body = (input ?? {}) as { mode?: unknown; fallbackModel?: unknown };
+    if (!isPeakPreferenceMode(body.mode)) {
+      throw new BadRequestError('mode must be one of continue, fallback, reject');
+    }
+    const mode = body.mode;
+    let fallbackModel: string | null = null;
+    if (mode === 'fallback') {
+      const raw = typeof body.fallbackModel === 'string' ? body.fallbackModel.trim() : '';
+      if (raw.length === 0) throw new BadRequestError('fallbackModel is required when mode is fallback');
+      if (raw.length > MAX_FALLBACK_MODEL_LENGTH) {
+        throw new BadRequestError(`fallbackModel must be at most ${MAX_FALLBACK_MODEL_LENGTH} characters`);
+      }
+      fallbackModel = raw;
+    }
+
+    await this.assertOwnership(keyId, userEmail);
+    const now = TimestampUtil.getCurrentUnixTimestampInSeconds();
+    await (await this.deps.peakPreferenceDAO()).upsert(keyId, mode, fallbackModel, now);
+    return { mode, fallbackModel };
+  }
+
+  private async assertOwnership(keyId: string, userEmail: string): Promise<void> {
+    const key = await (await this.deps.gatewayKeyDAO()).getByIdAndUser(keyId, userEmail.toLowerCase());
+    if (!key) throw new NotFoundError('Gateway key not found');
+  }
+
   public async pruneExpired(now: number, limit: number): Promise<number> {
     const dao = await this.deps.gatewayKeyDAO();
     return dao.pruneExpired(now, limit);
@@ -135,4 +203,11 @@ class GatewayKeyService {
 }
 
 export { GatewayKeyService };
-export type { CreatedGatewayKey, AuthenticatedGatewayKey, GatewayKeyServiceDeps, GatewayKeyServiceEnv };
+export type {
+  AuthenticatedGatewayKey,
+  CreatedGatewayKey,
+  GatewayKeyServiceDeps,
+  GatewayKeyServiceEnv,
+  PeakPreference,
+  PeakPreferenceStatus,
+};

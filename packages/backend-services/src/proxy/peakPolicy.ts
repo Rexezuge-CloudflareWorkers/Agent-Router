@@ -20,23 +20,24 @@ function peakRejection(model: string, retryAfterSeconds: number): Response {
 }
 
 /**
-Applies the user's peak-hours preference to a request for `requestedModel`.
+Applies the authenticated gateway key's peak-hours preference to a request
+for `requestedModel`.
 
 Returns `allow` when the model has no schedule, the current time is off-peak,
-or the user chose `continue`. Returns `rewrite` when the user wants a fallback
+or the key chose `continue`. Returns `rewrite` when the key wants a fallback
 and the request is inside a peak window. Returns `reject` with a ready-to-send
-429 response when the user chose `reject` (or `fallback` without a model).
+429 response when the key chose `reject` (or `fallback` without a model).
 */
 async function applyPeakPolicy(
   scope: Container,
-  userEmail: string,
+  gatewayKeyId: string,
   requestedModel: string | null,
   at: Date = new Date(),
 ): Promise<PeakDecision> {
   const schedule = findPeakSchedule(requestedModel);
   if (!schedule || !isPeakNow(schedule, at)) return { action: 'allow' };
 
-  const preference = await scope.get(Tokens.UserPeakPreferenceService).getPreference(userEmail);
+  const preference = await scope.get(Tokens.GatewayKeyService).getPeakPreference(gatewayKeyId);
   if (preference.mode === 'continue') return { action: 'allow' };
 
   if (preference.mode === 'fallback' && preference.fallbackModel) {

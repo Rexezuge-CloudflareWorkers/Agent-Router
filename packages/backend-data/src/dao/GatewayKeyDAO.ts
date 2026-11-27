@@ -60,6 +60,14 @@ class GatewayKeyDAO extends BaseDAO {
       .first<GatewayKeyRow>();
   }
 
+  public async getByIdAndUser(keyId: string, userEmail: string): Promise<GatewayKeyMetadata | null> {
+    const row = await this.database
+      .prepare('SELECT * FROM gateway_keys WHERE key_id = ? AND lower(user_email) = lower(?) LIMIT 1')
+      .bind(keyId, userEmail)
+      .first<GatewayKeyRow>();
+    return row ? toMetadata(row) : null;
+  }
+
   public async listByUser(userEmail: string): Promise<GatewayKeyMetadata[]> {
     const result = await this.database
       .prepare('SELECT * FROM gateway_keys WHERE lower(user_email) = lower(?) ORDER BY created_at DESC')

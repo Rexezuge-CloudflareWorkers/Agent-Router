@@ -9,9 +9,13 @@ const CONTINUE_PREFERENCE = { mode: 'continue', fallbackModel: null };
 
 function scopeWith(
   proxy: (input: Record<string, unknown>) => Promise<unknown>,
-  opts: { provider?: Record<string, unknown>; preference?: { mode: string; fallbackModel: string | null } } = {},
+  opts: {
+    provider?: Record<string, unknown>;
+    preference?: { mode: string; fallbackModel: string | null };
+    onPreferenceLookup?: (keyId: string) => void;
+  } = {},
 ): never {
-  const { provider, preference } = opts;
+  const { provider, preference, onPreferenceLookup } = opts;
   const resolvedProvider = provider ?? { id: 'p1', kind: 'OPENAI', status: 'active', baseUrl: null, name: 'p1' };
   const resolvedPreference = preference ?? CONTINUE_PREFERENCE;
   return {
@@ -24,7 +28,14 @@ function scopeWith(
       }
       if (token === Tokens.ProviderService) return { listProviders: async () => [resolvedProvider] };
       if (token === Tokens.RouterService) return { proxy };
-      if (token === Tokens.UserPeakPreferenceService) return { getPreference: async () => resolvedPreference };
+      if (token === Tokens.GatewayKeyService) {
+        return {
+          getPeakPreference: async (keyId: string) => {
+            onPreferenceLookup?.(keyId);
+            return resolvedPreference;
+          },
+        };
+      }
       throw new Error('unexpected token');
     },
   } as never;
@@ -166,6 +177,30 @@ describe('proxy operations', () => {
       const input = proxy.mock.calls[0]?.[0] as unknown as Record<string, unknown>;
       expect(input.upstreamModel).toBe('moonshotai/Kimi-K2.5');
       expect(input.upstreamBody).toMatchObject({ model: 'moonshotai/Kimi-K2.5' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('looks up the peak policy by the authenticated gateway key id', async () => {
+    vi.useFakeTimers({ now: PEAK_MONDAY, toFake: ['Date'] });
+    try {
+      const keyIds: string[] = [];
+      const proxy = vi.fn(async (_input: unknown) => ({
+        status: 200,
+        bodyText: '{}',
+        contentType: 'application/json',
+        providerKeyId: 'pk-1',
+      }));
+      const commandCode = { id: 'p1', kind: 'COMMAND_CODE', status: 'active', baseUrl: null, name: 'p1' };
+      await handleOpenAiProxy({} as never, request('{"model":"deepseek/deepseek-v4-pro"}'), '/chat', identity, () =>
+        scopeWith(proxy, {
+          provider: commandCode,
+          preference: { mode: 'continue', fallbackModel: null },
+          onPreferenceLookup: (keyId) => keyIds.push(keyId),
+        }),
+      );
+      expect(keyIds).toEqual([identity.gatewayKeyId]);
     } finally {
       vi.useRealTimers();
     }
