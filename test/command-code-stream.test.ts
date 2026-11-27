@@ -19,7 +19,7 @@ function translator(): CommandCodeTranslator {
     },
     finalize: () => [],
     finalJson: () => ({}),
-    failure: () => null,
+    failure: () => accumulator.error,
   } as unknown as CommandCodeTranslator;
 }
 
@@ -101,5 +101,117 @@ describe('relayStream', () => {
     expect(result.status).toBe(502);
     expect(result.message).toBe('boom');
     expect(result.retryable).toBe(true);
+  });
+
+  it('surfaces an error event with no rendered output as an HTTP failure', async () => {
+    const result = await relayStream({
+      upstream: new Response(sseStream(['{"type":"error","error":{"message":"quota","statusCode":429}}\n'])),
+      translator: translator(),
+      signal: new AbortController().signal,
+      idleMs: 1000,
+      heartbeatMs: 0,
+      usageOf,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.status).toBe(429);
+    expect(result.code).toBeNull();
+  });
+
+  it('returns 504 instead of throwing when the upstream is silent before any data', async () => {
+    const upstream = new Response(
+      new ReadableStream<Uint8Array>({
+        start() {
+          // Connected but silent: the real-world "slow thinking" failure.
+        },
+      }),
+    );
+    const result = await relayStream({
+      upstream,
+      translator: translator(),
+      signal: new AbortController().signal,
+      idleMs: 20,
+      heartbeatMs: 0,
+      usageOf,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.status).toBe(504);
+    expect(result.code).toBe('STREAM_IDLE_TIMEOUT');
+    expect(result.message).toContain('no data received for 20ms');
+  });
+
+  it('reports a post-start idle as an SSE error and settles failed usage', async () => {
+    const t = translator();
+    const encoder = new TextEncoder();
+    const upstream = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          // A non-renderable event must not hold the HTTP response open.
+          controller.enqueue(encoder.encode('{"type":"start"}\n'));
+        },
+      }),
+    );
+    const result = await relayStream({
+      upstream,
+      translator: t,
+      signal: new AbortController().signal,
+      idleMs: 20,
+      heartbeatMs: 0,
+      usageOf,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const text = await new Response(result.bodyStream).text();
+    expect(text).toContain('"code":"STREAM_IDLE_TIMEOUT"');
+    expect(text).toContain('no data received for 20ms');
+    expect((await result.usagePromise).failed).toBe(true);
+  });
+
+  it('emits SSE comment heartbeats while waiting for the first rendered token', async () => {
+    const encoder = new TextEncoder();
+    const upstream = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode('{"type":"start"}\n'));
+          setTimeout(() => {
+            controller.enqueue(encoder.encode('{"type":"text-delta","text":"done"}\n'));
+            controller.close();
+          }, 40);
+        },
+      }),
+    );
+    const result = await relayStream({
+      upstream,
+      translator: translator(),
+      signal: new AbortController().signal,
+      idleMs: 500,
+      heartbeatMs: 5,
+      usageOf,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const text = await new Response(result.bodyStream).text();
+    expect(text).toContain(': keep-alive');
+    expect(text).toContain('done');
+    expect((await result.usagePromise).failed).toBeUndefined();
+  });
+
+  it('finalizes a stream exactly once when it closes before any output', async () => {
+    const t = {
+      ...translator(),
+      finalize: () => ['final\n'],
+    } as unknown as CommandCodeTranslator;
+    const result = await relayStream({
+      upstream: new Response(sseStream([''])),
+      translator: t,
+      signal: new AbortController().signal,
+      idleMs: 1000,
+      heartbeatMs: 0,
+      usageOf,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(await new Response(result.bodyStream).text()).toBe('final\n');
   });
 });

@@ -126,8 +126,8 @@ class AppConfiguration extends BaseAppConfiguration {
     return this.commandCode.getStreamIdleMs();
   }
 
-  public getCommandCodeNonStreamIdleMs(): number {
-    return this.commandCode.getNonStreamIdleMs();
+  public getCommandCodeStreamHeartbeatMs(): number {
+    return this.commandCode.getStreamHeartbeatMs();
   }
 
   public getCommandCodeMaxToolImageMb(): number {

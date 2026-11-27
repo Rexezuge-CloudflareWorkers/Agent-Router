@@ -163,6 +163,10 @@ class CommandCodeService {
     const timer = setTimeout(() => controller.abort(), this.deps.config.getCommandCodeTimeoutMs());
     const onAbort = (): void => controller.abort();
     input.signal?.addEventListener('abort', onAbort, { once: true });
+    const cleanup = (): void => {
+      clearTimeout(timer);
+      input.signal?.removeEventListener('abort', onAbort);
+    };
     let upstream: Response;
     try {
       upstream = await this.deps.fetchImpl(`${base}/alpha/generate`, {
@@ -172,11 +176,11 @@ class CommandCodeService {
         signal: controller.signal,
       });
     } catch (error) {
-      clearTimeout(timer);
-      input.signal?.removeEventListener('abort', onAbort);
+      cleanup();
       if (input.signal?.aborted) throw abortError();
       throw error;
     }
+    let streamUsage: Promise<unknown> | undefined;
     try {
       if (!upstream.ok) {
         const text = await upstream.text().catch(() => '');
@@ -185,12 +189,17 @@ class CommandCodeService {
       }
       const translator = this.translatorFor(input, chatBody);
       if (!translator) return { ok: false, status: 400, message: 'Unsupported Command Code endpoint', retryable: false, code: null };
-      return input.stream
-        ? await this.translateStream(upstream, translator, controller.signal)
-        : await this.translateBuffered(upstream, translator);
+      if (input.stream) {
+        const result = await this.translateStream(upstream, translator, controller.signal);
+        if (result.ok && 'usagePromise' in result.result) streamUsage = result.result.usagePromise;
+        return result;
+      }
+      return await this.translateBuffered(upstream, translator);
     } finally {
-      clearTimeout(timer);
-      input.signal?.removeEventListener('abort', onAbort);
+      // A returned stream outlives this call: keep the total timeout and the
+      // client-disconnect bridge armed until the relay settles its usage.
+      if (streamUsage) void streamUsage.then(cleanup).catch(cleanup);
+      else cleanup();
     }
   }
 
@@ -259,10 +268,11 @@ class CommandCodeService {
       translator,
       signal,
       idleMs: this.deps.config.getCommandCodeStreamIdleMs(),
+      heartbeatMs: this.deps.config.getCommandCodeStreamHeartbeatMs(),
       usageOf: (accumulator) => this.usageOf(accumulator),
     });
     if (!relayed.ok) {
-      return { ok: false, status: relayed.status, message: relayed.message, retryable: relayed.retryable, code: null };
+      return { ok: false, status: relayed.status, message: relayed.message, retryable: relayed.retryable, code: relayed.code };
     }
     return {
       ok: true,

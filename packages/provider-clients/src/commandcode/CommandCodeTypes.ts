@@ -55,7 +55,7 @@ export interface CommandCodeStreamResult {
   promptTokens: number;
   completionTokens: number;
   estimated: boolean;
-  usagePromise: Promise<{ promptTokens: number; completionTokens: number; estimated: boolean }>;
+  usagePromise: Promise<{ promptTokens: number; completionTokens: number; estimated: boolean; failed?: boolean }>;
 }
 
 export type CommandCodeCallResult =

@@ -276,4 +276,36 @@ describe('CommandCodeService', () => {
     });
     expect(result).toMatchObject({ ok: false, status: 400, retryable: false });
   });
+
+  it('keeps client disconnect and the total timeout bridged to a returned stream', async () => {
+    const encoder = new TextEncoder();
+    const upstream = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode('{"type":"start"}\n'));
+        },
+      }),
+    );
+    let upstreamSignal: AbortSignal | undefined;
+    const fetchImpl = vi.fn(async (_url: string, init: RequestInit) => {
+      upstreamSignal = init.signal as AbortSignal;
+      return upstream;
+    }) as unknown as typeof fetch;
+    const controller = new AbortController();
+    const result = await makeService(fetchImpl).call({
+      endpoint: 'chat',
+      baseUrl: null,
+      secret: 'user_key',
+      keyId: 'k1',
+      body: { model: 'claude-sonnet-4-6', messages: [{ role: 'user', content: 'Hi' }] },
+      incomingHeaders: {},
+      stream: true,
+      signal: controller.signal,
+    });
+    expect(result.ok).toBe(true);
+    controller.abort();
+    expect(upstreamSignal?.aborted).toBe(true);
+    if (!result.ok || !('bodyStream' in result.result)) return;
+    await expect(result.result.bodyStream.getReader().read()).rejects.toMatchObject({ name: 'AbortError' });
+  });
 });
