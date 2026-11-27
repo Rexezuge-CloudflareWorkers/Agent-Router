@@ -2,11 +2,11 @@ import {
   CodexDeviceSessionDAO,
   CommandCodeKeyStateDAO,
   GatewayKeyDAO,
+  GatewayKeyPeakPreferenceDAO,
   ProviderDAO,
   ProviderKeyDAO,
   UsageLedgerDAO,
   UserDAO,
-  UserPeakPreferenceDAO,
 } from '@agent-router/backend-data/dao';
 import type { D1Queryable } from '@rexezuge/d1';
 import { Container, memoizeAsync } from '@agent-router/backend-runtime/di';
@@ -21,7 +21,6 @@ import { ProviderKeyService, ProviderService } from '@agent-router/backend-servi
 import { RouterService } from '@agent-router/backend-services/router';
 import { UsageService } from '@agent-router/backend-services/usage';
 import { UserService } from '@agent-router/backend-services/user';
-import { UserPeakPreferenceService } from '@agent-router/backend-services/user';
 import { Tokens } from './tokens';
 
 interface RequestScopeEnv {
@@ -60,12 +59,12 @@ function createRequestScope(env: RequestScopeEnv): Container {
   const daoDefs: Array<[string, () => Promise<unknown>]> = [
     ['UserDAO', () => Promise.resolve(new UserDAO(env.DB))],
     ['GatewayKeyDAO', () => Promise.resolve(new GatewayKeyDAO(env.DB))],
+    ['GatewayKeyPeakPreferenceDAO', () => Promise.resolve(new GatewayKeyPeakPreferenceDAO(env.DB))],
     ['ProviderDAO', () => Promise.resolve(new ProviderDAO(env.DB))],
     ['ProviderKeyDAO', () => Promise.resolve(new ProviderKeyDAO(env.DB))],
     ['CodexDeviceSessionDAO', () => Promise.resolve(new CodexDeviceSessionDAO(env.DB))],
     ['CommandCodeKeyStateDAO', () => Promise.resolve(new CommandCodeKeyStateDAO(env.DB))],
     ['UsageLedgerDAO', () => Promise.resolve(new UsageLedgerDAO(env.DB))],
-    ['UserPeakPreferenceDAO', () => Promise.resolve(new UserPeakPreferenceDAO(env.DB))],
   ];
   const daoFactories = {} as Record<string, () => Promise<unknown>>;
   for (const [tokenName, create] of daoDefs) {
@@ -77,20 +76,19 @@ function createRequestScope(env: RequestScopeEnv): Container {
 
   const userDAO = getDao<UserDAO>('UserDAO');
   const gatewayKeyDAO = getDao<GatewayKeyDAO>('GatewayKeyDAO');
+  const gatewayKeyPeakPreferenceDAO = getDao<GatewayKeyPeakPreferenceDAO>('GatewayKeyPeakPreferenceDAO');
   const providerDAO = getDao<ProviderDAO>('ProviderDAO');
   const providerKeyDAO = getDao<ProviderKeyDAO>('ProviderKeyDAO');
   const codexSessionDAO = getDao<CodexDeviceSessionDAO>('CodexDeviceSessionDAO');
   const commandCodeKeyStateDAO = getDao<CommandCodeKeyStateDAO>('CommandCodeKeyStateDAO');
   const usageDAO = getDao<UsageLedgerDAO>('UsageLedgerDAO');
-  const userPeakPreferenceDAO = getDao<UserPeakPreferenceDAO>('UserPeakPreferenceDAO');
 
   scope.bind(Tokens.AccessAuthService, () => new AccessAuthService(env as never));
   scope.bind(Tokens.UserService, () => new UserService(env as never, { userDAO }));
   scope.bind(
-    Tokens.UserPeakPreferenceService,
-    () => new UserPeakPreferenceService(env as never, { preferenceDAO: userPeakPreferenceDAO, userDAO }),
+    Tokens.GatewayKeyService,
+    () => new GatewayKeyService(env as never, { gatewayKeyDAO, peakPreferenceDAO: gatewayKeyPeakPreferenceDAO, userDAO, config }),
   );
-  scope.bind(Tokens.GatewayKeyService, () => new GatewayKeyService(env as never, { gatewayKeyDAO, userDAO, config }));
   scope.bind(Tokens.ProviderService, () => new ProviderService(env as never, { providerDAO, config }));
   scope.bind(
     Tokens.ProviderKeyService,

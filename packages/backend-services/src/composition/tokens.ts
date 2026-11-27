@@ -2,11 +2,11 @@ import type {
   CodexDeviceSessionDAO,
   CommandCodeKeyStateDAO,
   GatewayKeyDAO,
+  GatewayKeyPeakPreferenceDAO,
   ProviderDAO,
   ProviderKeyDAO,
   UsageLedgerDAO,
   UserDAO,
-  UserPeakPreferenceDAO,
 } from '@agent-router/backend-data/dao';
 import type { Token } from '@agent-router/backend-runtime/di';
 import type { AppConfiguration } from '@agent-router/backend-runtime/config';
@@ -20,18 +20,17 @@ import type { ProviderKeyService } from '../provider/ProviderKeyService';
 import type { RouterService } from '../router/RouterService';
 import type { UsageService } from '../usage/UsageService';
 import type { UserService } from '../user/UserService';
-import type { UserPeakPreferenceService } from '../user/UserPeakPreferenceService';
 
 const Tokens = {
   AppConfig: Symbol('AppConfig') as Token<AppConfiguration>,
   UserDAO: Symbol('UserDAO') as Token<() => Promise<UserDAO>>,
   GatewayKeyDAO: Symbol('GatewayKeyDAO') as Token<() => Promise<GatewayKeyDAO>>,
+  GatewayKeyPeakPreferenceDAO: Symbol('GatewayKeyPeakPreferenceDAO') as Token<() => Promise<GatewayKeyPeakPreferenceDAO>>,
   ProviderDAO: Symbol('ProviderDAO') as Token<() => Promise<ProviderDAO>>,
   ProviderKeyDAO: Symbol('ProviderKeyDAO') as Token<() => Promise<ProviderKeyDAO>>,
   CodexDeviceSessionDAO: Symbol('CodexDeviceSessionDAO') as Token<() => Promise<CodexDeviceSessionDAO>>,
   CommandCodeKeyStateDAO: Symbol('CommandCodeKeyStateDAO') as Token<() => Promise<CommandCodeKeyStateDAO>>,
   UsageLedgerDAO: Symbol('UsageLedgerDAO') as Token<() => Promise<UsageLedgerDAO>>,
-  UserPeakPreferenceDAO: Symbol('UserPeakPreferenceDAO') as Token<() => Promise<UserPeakPreferenceDAO>>,
   AccessAuthService: Symbol('AccessAuthService') as Token<AccessAuthService>,
   CodexOAuthService: Symbol('CodexOAuthService') as Token<CodexOAuthService>,
   CodexTokenService: Symbol('CodexTokenService') as Token<CodexTokenService>,
@@ -42,7 +41,6 @@ const Tokens = {
   RouterService: Symbol('RouterService') as Token<RouterService>,
   UsageService: Symbol('UsageService') as Token<UsageService>,
   UserService: Symbol('UserService') as Token<UserService>,
-  UserPeakPreferenceService: Symbol('UserPeakPreferenceService') as Token<UserPeakPreferenceService>,
 } satisfies Record<string, Token<unknown>>;
 
 export { Tokens };

@@ -40,5 +40,6 @@ describe('createRequestScope', () => {
     const factoryA = scope.get(Tokens.ProviderKeyDAO);
     const factoryB = scope.get(Tokens.ProviderKeyDAO);
     expect(factoryA).toBe(factoryB);
+    expect(scope.get(Tokens.GatewayKeyPeakPreferenceDAO)).toBe(scope.get(Tokens.GatewayKeyPeakPreferenceDAO));
   });
 });

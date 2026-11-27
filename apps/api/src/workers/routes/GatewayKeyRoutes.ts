@@ -32,6 +32,25 @@ function registerGatewayKeyRoutes(app: GatewayApp): void {
       return Response.json({ ok: true });
     });
   });
+
+  app.get('/user/gateway-keys/:id/settings/peak', async (c) => {
+    const email = c.get('AuthenticatedUserEmailAddress');
+    if (!tokenIdSchema.safeParse(c.req.param('id')).success) return badRequest('Invalid key id');
+    return respond(async () => {
+      const status = await createRequestScope(c.env).get(Tokens.GatewayKeyService).getPeakStatus(c.req.param('id'), email);
+      return Response.json(status);
+    });
+  });
+
+  app.patch('/user/gateway-keys/:id/settings/peak', async (c) => {
+    const email = c.get('AuthenticatedUserEmailAddress');
+    if (!tokenIdSchema.safeParse(c.req.param('id')).success) return badRequest('Invalid key id');
+    const body = await c.req.json().catch(() => ({}));
+    return respond(async () => {
+      const updated = await createRequestScope(c.env).get(Tokens.GatewayKeyService).updatePeakPreference(c.req.param('id'), email, body);
+      return Response.json(updated);
+    });
+  });
 }
 
 export { registerGatewayKeyRoutes };

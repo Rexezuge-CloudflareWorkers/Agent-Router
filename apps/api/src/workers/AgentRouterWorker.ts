@@ -52,7 +52,6 @@ class AgentRouterWorker extends AbstractEntrypointWorker {
     app.use('/docs/*', MiddlewareHandlers.userAuthentication());
     app.use('/user/gateway-keys*', rateLimit({ windowMs: 60_000, max: 30, keyPrefix: 'gateway-keys' }));
     app.use('/user/providers*', rateLimit({ windowMs: 60_000, max: 60, keyPrefix: 'providers' }));
-    app.use('/user/settings*', rateLimit({ windowMs: 60_000, max: 30, keyPrefix: 'user-settings' }));
 
     registerUserRoutes(app);
     registerGatewayKeyRoutes(app);

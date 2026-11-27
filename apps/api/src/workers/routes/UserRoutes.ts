@@ -1,6 +1,5 @@
 import type { Hono } from 'hono';
 import { Tokens, createRequestScope } from '@agent-router/backend-services/composition';
-import { respond } from './routeSupport';
 
 type UserApp = Hono<{ Bindings: Env; Variables: { AuthenticatedUserEmailAddress: string } }>;
 
@@ -21,23 +20,6 @@ function registerUserRoutes(app: UserApp): void {
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : 'Failed to rename' }, 400);
     }
-  });
-
-  app.get('/user/settings/peak', async (c) => {
-    const email = c.get('AuthenticatedUserEmailAddress');
-    return respond(async () => {
-      const status = await createRequestScope(c.env).get(Tokens.UserPeakPreferenceService).getStatus(email);
-      return Response.json(status);
-    });
-  });
-
-  app.patch('/user/settings/peak', async (c) => {
-    const email = c.get('AuthenticatedUserEmailAddress');
-    const body = await c.req.json().catch(() => ({}));
-    return respond(async () => {
-      const updated = await createRequestScope(c.env).get(Tokens.UserPeakPreferenceService).updatePreference(email, body);
-      return Response.json(updated);
-    });
   });
 }
 
