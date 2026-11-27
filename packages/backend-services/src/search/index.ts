@@ -1,0 +1,16 @@
+export { WebSearchClient } from './WebSearchClient';
+export { WebSearchRoutingService } from './WebSearchRoutingService';
+export { WebSearchSettingsService } from './WebSearchSettingsService';
+export { MAX_SEARCH_RESULTS, WEB_SEARCH_TOOL_NAME, isSearchProviderKind, isWebSearchMode } from './types';
+export type {
+  SearchEndpoint,
+  SearchProviderKind,
+  SearchResult,
+  SearchToolCall,
+  WebSearchConfig,
+  WebSearchMode,
+  WebSearchSettings,
+  WebSearchSettingsDeps,
+  WebSearchSettingsEnv,
+  WebSearchSettingsInput,
+} from './types';

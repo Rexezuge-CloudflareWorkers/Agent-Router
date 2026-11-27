@@ -244,7 +244,23 @@
     "language": "语言",
     "languageDescription": "选择你偏好的显示语言。",
     "selectLanguage": "选择语言",
-    "unknownLanguage": "未知"
+    "unknownLanguage": "未知",
+    "webSearch": "网页搜索",
+    "webSearchDescription": "选择网页搜索在所有网关请求中的工作方式。",
+    "webSearchModeLabel": "模式",
+    "webSearchMode": {
+      "none": "关闭",
+      "native": "使用服务商原生搜索",
+      "third_party": "第三方搜索 API"
+    },
+    "webSearchProvider": "搜索服务商",
+    "webSearchApiKey": "API 密钥",
+    "webSearchApiKeyPlaceholder": "粘贴你的 API 密钥",
+    "webSearchKeyHint": "留空则保留已存储的密钥。密钥经过加密，不会再次显示。",
+    "webSearchStoredKey": "已存储密钥：{{hint}}",
+    "webSearchUpdated": "网页搜索设置已更新。",
+    "webSearchFailed": "更新网页搜索设置失败。",
+    "webSearchLoadFailed": "加载网页搜索设置失败。"
   },
   "unauthorized": {
     "title": "需要访问权限",

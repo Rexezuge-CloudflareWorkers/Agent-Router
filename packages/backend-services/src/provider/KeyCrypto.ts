@@ -13,7 +13,7 @@ function fromBytes(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-type EncryptionPurpose = 'provider-keys' | 'codex-oauth';
+type EncryptionPurpose = 'provider-keys' | 'codex-oauth' | 'web-search-keys';
 
 async function importAesKey(masterKey: string, purpose: EncryptionPurpose): Promise<CryptoKey> {
   const hashHex = await CryptoUtil.sha256Hex(`agent-router-enc:${purpose}:${masterKey}`);

@@ -244,7 +244,23 @@
     "language": "Language",
     "languageDescription": "Choose your preferred display language.",
     "selectLanguage": "Select Language",
-    "unknownLanguage": "Unknown"
+    "unknownLanguage": "Unknown",
+    "webSearch": "Web Search",
+    "webSearchDescription": "Choose how web search works for all your gateway requests.",
+    "webSearchModeLabel": "Mode",
+    "webSearchMode": {
+      "none": "Off",
+      "native": "Provider Native",
+      "third_party": "Third-Party API"
+    },
+    "webSearchProvider": "Search Provider",
+    "webSearchApiKey": "API Key",
+    "webSearchApiKeyPlaceholder": "Paste your API key",
+    "webSearchKeyHint": "Leave empty to keep the stored key. The key is encrypted and never shown again.",
+    "webSearchStoredKey": "Stored key: {{hint}}",
+    "webSearchUpdated": "Web search settings updated.",
+    "webSearchFailed": "Failed to update web search settings.",
+    "webSearchLoadFailed": "Failed to load web search settings."
   },
   "unauthorized": {
     "title": "Access Required",

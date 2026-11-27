@@ -7,6 +7,7 @@ import {
   ProviderKeyDAO,
   UsageLedgerDAO,
   UserDAO,
+  WebSearchSettingsDAO,
 } from '@agent-router/backend-data/dao';
 import type { D1Queryable } from '@rexezuge/d1';
 import { Container, memoizeAsync } from '@agent-router/backend-runtime/di';
@@ -19,6 +20,7 @@ import { CommandCodeService } from '@agent-router/backend-services/commandcode/C
 import { GatewayKeyService } from '@agent-router/backend-services/gateway';
 import { ProviderKeyService, ProviderService } from '@agent-router/backend-services/provider';
 import { RouterService } from '@agent-router/backend-services/router';
+import { WebSearchRoutingService, WebSearchSettingsService } from '@agent-router/backend-services/search';
 import { UsageService } from '@agent-router/backend-services/usage';
 import { UserService } from '@agent-router/backend-services/user';
 import { Tokens } from './tokens';
@@ -28,6 +30,7 @@ interface RequestScopeEnv {
   PROVIDER_KEYS_ENCRYPTION_SECRET?: { get(): Promise<string> };
   CODEX_OAUTH_ENCRYPTION_SECRET?: { get(): Promise<string> };
   COMMAND_CODE_FINGERPRINT_SALT?: { get(): Promise<string> };
+  WEB_SEARCH_ENCRYPTION_SECRET?: { get(): Promise<string> };
 }
 
 /**
@@ -55,6 +58,10 @@ function createRequestScope(env: RequestScopeEnv): Container {
   const commandCodeSalt = async (): Promise<string> => {
     return env.COMMAND_CODE_FINGERPRINT_SALT ? env.COMMAND_CODE_FINGERPRINT_SALT.get() : '';
   };
+  const webSearchKey = memoizeAsync(() => {
+    if (!env.WEB_SEARCH_ENCRYPTION_SECRET) throw new Error('WEB_SEARCH_ENCRYPTION_SECRET is not configured for this scope.');
+    return env.WEB_SEARCH_ENCRYPTION_SECRET.get();
+  });
 
   const daoDefs: Array<[string, () => Promise<unknown>]> = [
     ['UserDAO', () => Promise.resolve(new UserDAO(env.DB))],
@@ -65,6 +72,7 @@ function createRequestScope(env: RequestScopeEnv): Container {
     ['CodexDeviceSessionDAO', () => Promise.resolve(new CodexDeviceSessionDAO(env.DB))],
     ['CommandCodeKeyStateDAO', () => Promise.resolve(new CommandCodeKeyStateDAO(env.DB))],
     ['UsageLedgerDAO', () => Promise.resolve(new UsageLedgerDAO(env.DB))],
+    ['WebSearchSettingsDAO', () => Promise.resolve(new WebSearchSettingsDAO(env.DB))],
   ];
   const daoFactories = {} as Record<string, () => Promise<unknown>>;
   for (const [tokenName, create] of daoDefs) {
@@ -82,6 +90,7 @@ function createRequestScope(env: RequestScopeEnv): Container {
   const codexSessionDAO = getDao<CodexDeviceSessionDAO>('CodexDeviceSessionDAO');
   const commandCodeKeyStateDAO = getDao<CommandCodeKeyStateDAO>('CommandCodeKeyStateDAO');
   const usageDAO = getDao<UsageLedgerDAO>('UsageLedgerDAO');
+  const webSearchSettingsDAO = getDao<WebSearchSettingsDAO>('WebSearchSettingsDAO');
 
   scope.bind(Tokens.AccessAuthService, () => new AccessAuthService(env as never));
   scope.bind(Tokens.UserService, () => new UserService(env as never, { userDAO }));
@@ -124,6 +133,18 @@ function createRequestScope(env: RequestScopeEnv): Container {
         config,
         codexTokens: scope.get(Tokens.CodexTokenService),
         commandCode: scope.get(Tokens.CommandCodeService),
+      }),
+  );
+  scope.bind(
+    Tokens.WebSearchSettingsService,
+    () => new WebSearchSettingsService(env as never, { dao: webSearchSettingsDAO, masterKey: webSearchKey }),
+  );
+  scope.bind(
+    Tokens.WebSearchRoutingService,
+    () =>
+      new WebSearchRoutingService({
+        settings: scope.get(Tokens.WebSearchSettingsService),
+        router: scope.get(Tokens.RouterService),
       }),
   );
   scope.bind(Tokens.UsageService, () => new UsageService(env as never, { usageDAO }));

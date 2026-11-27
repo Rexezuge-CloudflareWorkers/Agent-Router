@@ -10,6 +10,7 @@ import { registerProviderRoutes } from './routes/ProviderRoutes';
 import { registerProxyRoutes } from './routes/ProxyRoutes';
 import { registerUsageRoutes } from './routes/UsageRoutes';
 import { registerUserRoutes } from './routes/UserRoutes';
+import { registerWebSearchSettingsRoutes } from './routes/WebSearchSettingsRoutes';
 
 type AppRouter = HonoOpenAPIRouterType<{
   Bindings: Env;
@@ -52,11 +53,13 @@ class AgentRouterWorker extends AbstractEntrypointWorker {
     app.use('/docs/*', MiddlewareHandlers.userAuthentication());
     app.use('/user/gateway-keys*', rateLimit({ windowMs: 60_000, max: 30, keyPrefix: 'gateway-keys' }));
     app.use('/user/providers*', rateLimit({ windowMs: 60_000, max: 60, keyPrefix: 'providers' }));
+    app.use('/user/settings/web-search', rateLimit({ windowMs: 60_000, max: 30, keyPrefix: 'web-search-settings' }));
 
     registerUserRoutes(app);
     registerGatewayKeyRoutes(app);
     registerProviderRoutes(app);
     registerUsageRoutes(app);
+    registerWebSearchSettingsRoutes(app);
 
     const openapi: AppRouter = fromHono(app, { docs_url: '/docs' });
 

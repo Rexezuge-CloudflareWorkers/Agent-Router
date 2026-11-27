@@ -22,6 +22,8 @@
     "./router/*": "./src/router/*.ts",
     "./proxy": "./src/proxy/index.ts",
     "./proxy/*": "./src/proxy/*.ts",
+    "./search": "./src/search/index.ts",
+    "./search/*": "./src/search/*.ts",
     "./usage": "./src/usage/index.ts",
     "./usage/*": "./src/usage/*.ts",
     "./composition": "./src/composition/index.ts",

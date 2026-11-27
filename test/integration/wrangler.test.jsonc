@@ -29,6 +29,11 @@
       "store_id": "00000000-0000-0000-0000-000000000000",
       "secret_name": "test-codex-oauth-encryption-key",
     },
+    {
+      "binding": "WEB_SEARCH_ENCRYPTION_SECRET",
+      "store_id": "00000000-0000-0000-0000-000000000000",
+      "secret_name": "test-web-search-encryption-key",
+    },
   ],
   "vars": {
     "DEV_AUTH_EMAIL": "test@example.com",

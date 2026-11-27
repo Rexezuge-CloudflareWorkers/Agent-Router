@@ -1,0 +1,148 @@
+import { describe, expect, it } from 'vitest';
+import {
+  appendToolResult,
+  bufferedBody,
+  bufferedUpstreamPath,
+  findSearchToolCall,
+  injectSearchTool,
+  stripNativeSearch,
+} from '@agent-router/backend-services/search/requestShapes';
+import { injectCitations, toSse } from '@agent-router/backend-services/search/responseShapes';
+import type { SearchResult } from '@agent-router/backend-services/search';
+
+const results: SearchResult[] = [{ title: 'Source', url: 'https://source.test', snippet: 'A snippet' }];
+
+describe('web search request shapes', () => {
+  it('strips native search flags on every endpoint', () => {
+    const chat = { web_search_options: {}, tools: [{ type: 'web_search' }, { type: 'function' }] };
+    expect(stripNativeSearch(chat, 'chat')).toBe(true);
+    expect(chat).toEqual({ tools: [{ type: 'function' }] });
+
+    const responses = { tools: [{ type: 'web_search_preview' }, { type: 'function', name: 'other' }] };
+    expect(stripNativeSearch(responses, 'responses')).toBe(true);
+    expect(responses.tools).toHaveLength(1);
+
+    const anthropic = { tools: [{ type: 'web_search_20250305', name: 'web_search' }] };
+    expect(stripNativeSearch(anthropic, 'anthropic')).toBe(true);
+    expect(anthropic.tools).toEqual([]);
+
+    const gemini = { tools: [{ googleSearch: {} }, { functionDeclarations: [] }] };
+    expect(stripNativeSearch(gemini, 'gemini')).toBe(true);
+    expect(gemini.tools).toEqual([{ functionDeclarations: [] }]);
+  });
+
+  it('injects one generic tool in each native shape', () => {
+    const chat: Record<string, unknown> = {};
+    injectSearchTool(chat, 'chat');
+    expect((chat.tools as Array<Record<string, unknown>>)[0].function).toMatchObject({ name: 'web_search' });
+
+    const responses: Record<string, unknown> = {};
+    injectSearchTool(responses, 'responses');
+    expect((responses.tools as Array<Record<string, unknown>>)[0]).toMatchObject({ type: 'function', name: 'web_search' });
+
+    const anthropic: Record<string, unknown> = {};
+    injectSearchTool(anthropic, 'anthropic');
+    expect((anthropic.tools as Array<Record<string, unknown>>)[0].input_schema).toBeDefined();
+
+    const gemini: Record<string, unknown> = {};
+    injectSearchTool(gemini, 'gemini');
+    expect((gemini.tools as Array<Record<string, unknown>>)[0].functionDeclarations).toHaveLength(1);
+
+    injectSearchTool(chat, 'chat');
+    expect(chat.tools).toHaveLength(1);
+  });
+
+  it('detects a web_search call in every response shape', () => {
+    expect(
+      findSearchToolCall(
+        { choices: [{ message: { tool_calls: [{ id: 'c1', function: { name: 'web_search', arguments: '{"query":"one"}' } }] } }] },
+        'chat',
+      ),
+    ).toEqual({ id: 'c1', query: 'one' });
+    expect(
+      findSearchToolCall(
+        { output: [{ type: 'function_call', call_id: 'f1', name: 'web_search', arguments: '{"query":"two"}' }] },
+        'responses',
+      ),
+    ).toEqual({ id: 'f1', query: 'two' });
+    expect(
+      findSearchToolCall({ content: [{ type: 'tool_use', id: 't1', name: 'web_search', input: { query: 'three' } }] }, 'anthropic'),
+    ).toEqual({
+      id: 't1',
+      query: 'three',
+    });
+    expect(
+      findSearchToolCall(
+        { candidates: [{ content: { parts: [{ functionCall: { name: 'web_search', args: { query: 'four' } } }] } }] },
+        'gemini',
+      ),
+    ).toEqual({ id: 'call_web_search', query: 'four' });
+    expect(findSearchToolCall({ choices: [{ message: { content: 'done' } }] }, 'chat')).toBeNull();
+  });
+
+  it('appends the tool call and result in each native request shape', () => {
+    const chat: Record<string, unknown> = { messages: [{ role: 'user', content: 'hi' }] };
+    appendToolResult(chat, 'chat', { id: 'c1', query: 'q' }, 'found');
+    expect(chat.messages).toHaveLength(3);
+    expect((chat.messages as Array<Record<string, unknown>>)[2]).toMatchObject({ role: 'tool', tool_call_id: 'c1', content: 'found' });
+
+    const responses: Record<string, unknown> = { input: 'hi' };
+    appendToolResult(responses, 'responses', { id: 'f1', query: 'q' }, 'found');
+    const input = responses.input as Array<Record<string, unknown>>;
+    expect(input[0]).toMatchObject({ type: 'message', role: 'user' });
+    expect(input[2]).toMatchObject({ type: 'function_call_output', call_id: 'f1', output: 'found' });
+
+    const anthropic: Record<string, unknown> = { messages: [{ role: 'user', content: 'hi' }] };
+    appendToolResult(anthropic, 'anthropic', { id: 't1', query: 'q' }, 'found');
+    expect((anthropic.messages as Array<Record<string, unknown>>)[2].content).toMatchObject([{ tool_use_id: 't1', content: 'found' }]);
+
+    const gemini: Record<string, unknown> = { contents: [{ role: 'user', parts: [{ text: 'hi' }] }] };
+    appendToolResult(gemini, 'gemini', { id: 'g1', query: 'q' }, 'found');
+    expect((gemini.contents as Array<Record<string, unknown>>)[2].parts).toMatchObject([{ functionResponse: { name: 'web_search' } }]);
+  });
+
+  it('forces buffered calls for the two-phase flow', () => {
+    expect(bufferedBody({ stream: true }, 'chat')).toEqual({ stream: false });
+    expect(bufferedUpstreamPath('gemini', '/v1beta/models/g:streamGenerateContent')).toBe('/v1beta/models/g:generateContent');
+  });
+});
+
+describe('web search response shapes', () => {
+  it('injects citations for every client shape', () => {
+    const chat = injectCitations({ choices: [{ message: { role: 'assistant', content: 'See [1]' } }] }, results, 'chat');
+    expect((chat.choices as Array<Record<string, unknown>>)[0]).toHaveProperty('message.annotations');
+
+    const responses = injectCitations(
+      { output: [{ type: 'message', content: [{ type: 'output_text', text: 'See [1]' }] }], output_text: 'See [1]' },
+      results,
+      'responses',
+    );
+    expect(responses.output).toMatchObject([{ content: [{ annotations: [{ type: 'url_citation' }] }] }]);
+
+    const anthropic = injectCitations({ content: [{ type: 'text', text: 'See [1]' }] }, results, 'anthropic');
+    expect(anthropic.content).toMatchObject([{ citations: [{ type: 'web_search_result_location' }] }]);
+
+    const gemini = injectCitations({ candidates: [{ content: { parts: [{ text: 'See [1]' }] } }] }, results, 'gemini');
+    expect(gemini.candidates).toMatchObject([
+      { groundingMetadata: { groundingChunks: [{ web: { uri: 'https://source.test', title: 'Source' } }] } },
+    ]);
+  });
+
+  it('renders native SSE frames with final citations', () => {
+    const chat = toSse({ id: 'x', model: 'm', choices: [{ message: { content: 'See [1]' } }] }, results, 'chat');
+    expect(chat).toContain('chat.completion.chunk');
+    expect(chat).toContain('annotations');
+    expect(chat).toContain('data: [DONE]');
+
+    const responses = toSse({ id: 'r', model: 'm', output_text: 'See [1]', output: [] }, results, 'responses');
+    expect(responses).toContain('response.output_text.annotation.added');
+    expect(responses).toContain('response.completed');
+
+    const anthropic = toSse({ id: 'a', model: 'm', content: [{ type: 'text', text: 'See [1]' }] }, results, 'anthropic');
+    expect(anthropic).toContain('content_block_start');
+    expect(anthropic).toContain('web_search_result_location');
+
+    const gemini = toSse({ candidates: [{ content: { parts: [{ text: 'See [1]' }] } }] }, results, 'gemini');
+    expect(gemini).toContain('groundingMetadata');
+  });
+});
