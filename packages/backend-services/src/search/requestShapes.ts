@@ -129,11 +129,11 @@ function findSearchToolCalls(payload: unknown, endpoint: SearchEndpoint): Search
   const response = asRecord(payload);
   const found: SearchToolCall[] = [];
   const seen = new Set<string>();
-  const push = (id: string, query: string): void => {
+  const push = (id: string, query: string, itemId?: string): void => {
     const key = `${id}:${query}`;
     if (!query || seen.has(key)) return;
     seen.add(key);
-    found.push({ id: id || `call_${WEB_SEARCH_TOOL_NAME}_${found.length}`, query });
+    found.push({ id: id || `call_${WEB_SEARCH_TOOL_NAME}_${found.length}`, ...(itemId && { itemId }), query });
   };
 
   if (endpoint === 'chat') {
@@ -148,7 +148,8 @@ function findSearchToolCalls(payload: unknown, endpoint: SearchEndpoint): Search
   if (endpoint === 'responses') {
     for (const item of records(response.output)) {
       if (asString(item.type) !== 'function_call' || asString(item.name) !== WEB_SEARCH_TOOL_NAME) continue;
-      push(asString(item.call_id) || asString(item.id), queryFromArguments(item.arguments));
+      const itemId = asString(item.id);
+      push(asString(item.call_id) || itemId, queryFromArguments(item.arguments), itemId);
     }
     return found;
   }
@@ -208,16 +209,18 @@ function appendToolResult(body: JsonBody, endpoint: SearchEndpoint, call: Search
   }
   if (endpoint === 'responses') {
     const input = inputArray(body);
-    input.push(
-      {
+    // A stored response already contains the assistant function_call; replaying
+    // it alongside previous_response_id is rejected by the Responses API.
+    if (typeof body.previous_response_id !== 'string' || body.previous_response_id.length === 0) {
+      input.push({
         type: 'function_call',
-        id: call.id,
+        id: call.itemId ?? call.id,
         call_id: call.id,
         name: WEB_SEARCH_TOOL_NAME,
         arguments: JSON.stringify({ query: call.query }),
-      },
-      { type: 'function_call_output', call_id: call.id, output: content },
-    );
+      });
+    }
+    input.push({ type: 'function_call_output', call_id: call.id, output: content });
     body.input = input;
     return;
   }
@@ -280,7 +283,12 @@ Force a buffered call so a tool call can be detected deterministically.
 */
 function bufferedBody(body: JsonBody, endpoint: SearchEndpoint): JsonBody {
   const copy = { ...body };
-  if (endpoint !== 'gemini') copy.stream = false;
+  if (endpoint !== 'gemini') {
+    copy.stream = false;
+    // stream_options is only legal on streaming upstream calls. Removing it
+    // here keeps forced buffering from turning into an upstream 400.
+    delete copy.stream_options;
+  }
   return copy;
 }
 

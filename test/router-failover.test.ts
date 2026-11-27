@@ -98,6 +98,45 @@ describe('RouterService failover', () => {
     expect(usage[0].total_tokens ?? (usage[0] as { totalTokens?: number }).totalTokens ?? 15).toBeDefined();
   });
 
+  it('forwards a Responses body unchanged and meters buffered input/output tokens', async () => {
+    const k1 = row('k1');
+    k1.encrypted_key = await enc('sk-1');
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(200, { id: 'resp_1', output_text: 'hi', output: [], usage: { input_tokens: 12, output_tokens: 4, total_tokens: 16 } }),
+    );
+    const { svc, events, usage } = makeService([k1], fetchImpl as unknown as typeof fetch);
+    const body = {
+      model: 'gpt-5',
+      input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hi' }] }],
+      instructions: 'Be brief',
+      previous_response_id: 'resp_0',
+      store: true,
+      reasoning: { effort: 'low' },
+    };
+    const result = await svc.proxy({
+      userEmail: 'u@x.y',
+      gatewayKeyId: 'gw1',
+      providerId: 'p1',
+      providerKind: 'OPENAI',
+      providerBaseUrl: 'https://api.openai.com/v1',
+      upstreamPath: '/responses',
+      upstreamBody: body,
+      upstreamModel: 'gpt-5',
+      bodyBytes: 100,
+      rawBodyText: JSON.stringify(body),
+    });
+
+    expect(result.status).toBe(200);
+    expect(result.promptTokens).toBe(12);
+    expect(result.completionTokens).toBe(4);
+    expect(result.estimated).toBe(false);
+    expect(events).toContain('success:k1');
+    expect(usage).toHaveLength(1);
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://api.openai.com/v1/responses');
+    expect(JSON.parse(init.body as string)).toEqual(body);
+  });
+
   it('fails over from 429 to the next key', async () => {
     const k1 = row('k1', { priority: 0 });
     const k2 = row('k2', { priority: 1 });

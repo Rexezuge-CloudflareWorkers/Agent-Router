@@ -198,60 +198,133 @@ function toSse(payload: unknown, results: SearchResult[], endpoint: SearchEndpoi
   }
 
   if (endpoint === 'responses') {
-    const messageId = `msg_${id}`;
-    const annotationEvents = citations.map((citation) =>
-      sse('response.output_text.annotation.added', {
-        type: 'response.output_text.annotation.added',
-        item_id: messageId,
-        output_index: 0,
-        annotation_index: citation.index - 1,
-        annotation: {
-          type: 'url_citation',
-          url: citation.url,
-          title: citation.title,
-          start_index: citation.startIndex,
-          end_index: citation.endIndex,
-        },
-      }),
-    );
-    return [
+    // Use the cited payload for both the incremental frames and the final
+    // response.completed so item ids and annotations never disagree.
+    const cited = asRecord(injectCitations(payload, results, endpoint));
+    const upstreamOutput = records(cited.output);
+    const output =
+      upstreamOutput.length > 0
+        ? upstreamOutput
+        : [
+            {
+              type: 'message',
+              id: `msg_${id}`,
+              status: 'completed',
+              role: 'assistant',
+              content: [{ type: 'output_text', text, annotations: openAiAnnotations(citations) }],
+            },
+          ];
+    const chunks: string[] = [
       sse('response.created', {
         type: 'response.created',
         response: { id, object: 'response', created_at: created, status: 'in_progress', model, output: [] },
       }),
-      sse('response.output_item.added', {
-        type: 'response.output_item.added',
-        output_index: 0,
-        item: { type: 'message', id: messageId, status: 'in_progress', role: 'assistant', content: [] },
-      }),
-      sse('response.output_text.delta', {
-        type: 'response.output_text.delta',
-        item_id: messageId,
-        output_index: 0,
-        content_index: 0,
-        delta: text,
-      }),
-      sse('response.output_text.done', {
-        type: 'response.output_text.done',
-        item_id: messageId,
-        output_index: 0,
-        content_index: 0,
-        text,
-      }),
-      ...annotationEvents,
-      sse('response.output_item.done', {
-        type: 'response.output_item.done',
-        output_index: 0,
-        item: {
-          type: 'message',
-          id: messageId,
-          status: 'completed',
-          role: 'assistant',
-          content: [{ type: 'output_text', text, annotations: openAiAnnotations(citations) }],
-        },
-      }),
-      sse('response.completed', { type: 'response.completed', response: injectCitations(body, results, endpoint) }),
-    ].join('');
+    ];
+    output.forEach((item, outputIndex) => {
+      const itemType = asString(item.type);
+      const itemId = asString(item.id) || (itemType === 'message' ? `msg_${id}` : `${itemType}_${outputIndex}`);
+      chunks.push(
+        sse('response.output_item.added', {
+          type: 'response.output_item.added',
+          output_index: outputIndex,
+          item: { ...item, id: itemId, status: 'in_progress' },
+        }),
+      );
+      switch (itemType) {
+        case 'message': {
+          records(item.content).forEach((block, contentIndex) => {
+            if (asString(block.type) !== 'output_text') return;
+            const blockText = asString(block.text);
+            chunks.push(
+              sse('response.output_text.delta', {
+                type: 'response.output_text.delta',
+                item_id: itemId,
+                output_index: outputIndex,
+                content_index: contentIndex,
+                delta: blockText,
+              }),
+              sse('response.output_text.done', {
+                type: 'response.output_text.done',
+                item_id: itemId,
+                output_index: outputIndex,
+                content_index: contentIndex,
+                text: blockText,
+              }),
+            );
+            records(block.annotations).forEach((annotation, annotationIndex) => {
+              chunks.push(
+                sse('response.output_text.annotation.added', {
+                  type: 'response.output_text.annotation.added',
+                  item_id: itemId,
+                  output_index: outputIndex,
+                  content_index: contentIndex,
+                  annotation_index: annotationIndex,
+                  annotation,
+                }),
+              );
+            });
+          });
+
+          break;
+        }
+        case 'reasoning': {
+          const summary = records(item.summary)
+            .map((part) => asString(part.text))
+            .join('');
+          if (summary) {
+            chunks.push(
+              sse('response.reasoning_text.delta', {
+                type: 'response.reasoning_text.delta',
+                item_id: itemId,
+                output_index: outputIndex,
+                summary_index: 0,
+                delta: summary,
+              }),
+              sse('response.reasoning_text.done', {
+                type: 'response.reasoning_text.done',
+                item_id: itemId,
+                output_index: outputIndex,
+                summary_index: 0,
+                text: summary,
+              }),
+            );
+          }
+
+          break;
+        }
+        case 'function_call': {
+          const args = asString(item.arguments);
+          if (args) {
+            chunks.push(
+              sse('response.function_call_arguments.delta', {
+                type: 'response.function_call_arguments.delta',
+                item_id: itemId,
+                output_index: outputIndex,
+                delta: args,
+              }),
+              sse('response.function_call_arguments.done', {
+                type: 'response.function_call_arguments.done',
+                item_id: itemId,
+                output_index: outputIndex,
+                arguments: args,
+              }),
+            );
+          }
+
+          break;
+        }
+        // No default
+      }
+      chunks.push(
+        sse('response.output_item.done', {
+          type: 'response.output_item.done',
+          output_index: outputIndex,
+          item: { ...item, id: itemId, status: 'completed' },
+        }),
+      );
+    });
+    chunks.push(sse('response.completed', { type: 'response.completed', response: cited }));
+    return chunks.join('');
   }
 
   if (endpoint === 'anthropic') {
