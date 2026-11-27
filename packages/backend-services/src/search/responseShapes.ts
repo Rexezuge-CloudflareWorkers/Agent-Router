@@ -346,7 +346,12 @@ function toSse(payload: unknown, results: SearchResult[], endpoint: SearchEndpoi
     ].join('');
   }
 
-  return sse(null, injectCitations(body, results, endpoint));
+  // Gemini streams are still `data:` frames carrying JSON chunks. Emit a
+  // text chunk followed by the final payload with grounding metadata.
+  return [
+    sse(null, { candidates: [{ index: 0, content: { parts: [{ text }] } }] }),
+    sse(null, injectCitations(body, results, endpoint)),
+  ].join('');
 }
 
 export { anthropicCitations, citationsFor, injectCitations, openAiAnnotations, textOf, toSse };

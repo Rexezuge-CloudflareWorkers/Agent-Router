@@ -92,7 +92,7 @@ describe('SearchProviderKeyService', () => {
 });
 
 describe('SearchKeyPoolService', () => {
-  function harness(rows: Array<Record<string, unknown>>) {
+  function harness(rows: Array<Record<string, unknown>>, decrypt: (id: string) => Promise<string> = async () => 'decrypted-key') {
     const calls = { success: [] as string[], failure: [] as string[] };
     const dao = {
       listSelectableByUser: async () => rows,
@@ -105,12 +105,25 @@ describe('SearchKeyPoolService', () => {
     const env = { DB: {} as never };
     const pool = new SearchKeyPoolService(env, {
       keyDAO: () => Promise.resolve(dao as never),
-      keyService: () => ({ decryptSecret: async () => 'decrypted-key' }) as never,
+      keyService: () => ({ decryptSecret: decrypt }) as never,
       config: AppConfiguration.fromEnv(env),
       now: () => 1000,
     });
     return { pool, dao, calls };
   }
+
+  it('skips an undecryptable key instead of failing the whole pool', async () => {
+    const { pool } = harness(
+      [row({ id: 'sk-broken' }), row({ id: 'sk-healthy', provider_id: 'sp-tavily', provider_kind: 'TAVILY' })],
+      async (id) => {
+        if (id === 'sk-broken') throw new Error('missing secret');
+        return 'decrypted-key';
+      },
+    );
+    expect(await pool.select('u@x.y', 'sp-brave')).toEqual([
+      expect.objectContaining({ keyId: 'sk-healthy', kind: 'TAVILY', apiKey: 'decrypted-key' }),
+    ]);
+  });
 
   it('selects preferred-provider keys first and stops at the attempt cap', async () => {
     const { pool } = harness([row({ id: 'sk-brave' }), row({ id: 'sk-tavily', provider_kind: 'TAVILY' })]);

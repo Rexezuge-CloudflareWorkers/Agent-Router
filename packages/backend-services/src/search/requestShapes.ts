@@ -97,6 +97,41 @@ function injectSearchTool(body: JsonBody, endpoint: SearchEndpoint): void {
 }
 
 /**
+Forces the injected tool in the client's native shape. Returns a restore
+closure so the final no-tool call does not inherit a choice naming a tool
+that has just been removed.
+*/
+function forceSearchTool(body: JsonBody, endpoint: SearchEndpoint): () => void {
+  const original = { tool_choice: body.tool_choice, toolConfig: body.toolConfig };
+  switch (endpoint) {
+    case 'gemini': {
+      body.toolConfig = { functionCallingConfig: { mode: 'ANY', allowedFunctionNames: [WEB_SEARCH_TOOL_NAME] } };
+
+      break;
+    }
+    case 'anthropic': {
+      body.tool_choice = { type: 'tool', name: WEB_SEARCH_TOOL_NAME };
+
+      break;
+    }
+    case 'responses': {
+      body.tool_choice = { type: 'function', name: WEB_SEARCH_TOOL_NAME };
+
+      break;
+    }
+    default: {
+      body.tool_choice = { type: 'function', function: { name: WEB_SEARCH_TOOL_NAME } };
+    }
+  }
+  return () => {
+    for (const [key, value] of Object.entries(original)) {
+      if (value === undefined) delete body[key];
+      else body[key] = value;
+    }
+  };
+}
+
+/**
 Drops only our injected tool, preserving any tools the client supplied.
 */
 function removeSearchTool(body: JsonBody, endpoint: SearchEndpoint): void {
@@ -184,14 +219,26 @@ function inputArray(body: JsonBody): unknown[] {
 /**
 Appends the assistant tool calls and their search results in the client's shape.
 */
-function appendToolResults(body: JsonBody, endpoint: SearchEndpoint, calls: SearchToolCall[], contents: string[]): void {
-  calls.forEach((call, index) => appendToolResult(body, endpoint, call, contents[index] ?? ''));
+function appendToolResults(
+  body: JsonBody,
+  endpoint: SearchEndpoint,
+  calls: SearchToolCall[],
+  contents: string[],
+  options: { replayAssistantCall?: boolean } = {},
+): void {
+  calls.forEach((call, index) => appendToolResult(body, endpoint, call, contents[index] ?? '', options));
 }
 
 /**
 Appends one assistant tool call and its search result in the client's shape.
 */
-function appendToolResult(body: JsonBody, endpoint: SearchEndpoint, call: SearchToolCall, content: string): void {
+function appendToolResult(
+  body: JsonBody,
+  endpoint: SearchEndpoint,
+  call: SearchToolCall,
+  content: string,
+  options: { replayAssistantCall?: boolean } = {},
+): void {
   if (endpoint === 'chat') {
     const messages = records(body.messages);
     messages.push(
@@ -209,9 +256,11 @@ function appendToolResult(body: JsonBody, endpoint: SearchEndpoint, call: Search
   }
   if (endpoint === 'responses') {
     const input = inputArray(body);
-    // A stored response already contains the assistant function_call; replaying
-    // it alongside previous_response_id is rejected by the Responses API.
-    if (typeof body.previous_response_id !== 'string' || body.previous_response_id.length === 0) {
+    // A stored response already contains the *first* assistant function_call;
+    // replaying that one alongside previous_response_id is rejected by the
+    // Responses API. Later rounds must replay their own calls so each tool
+    // output references an item the upstream can see.
+    if (options.replayAssistantCall !== false) {
       input.push({
         type: 'function_call',
         id: call.itemId ?? call.id,
@@ -301,6 +350,7 @@ export {
   bufferedUpstreamPath,
   findSearchToolCall,
   findSearchToolCalls,
+  forceSearchTool,
   injectSearchTool,
   removeSearchTool,
   stripNativeSearch,

@@ -7,6 +7,7 @@ import {
   bufferedUpstreamPath,
   findSearchToolCall,
   findSearchToolCalls,
+  forceSearchTool,
   injectSearchTool,
   removeSearchTool,
   stripNativeSearch,
@@ -111,7 +112,7 @@ describe('web search request shapes', () => {
       store: true,
       input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hi' }] }],
     };
-    appendToolResult(stateful, 'responses', call, 'found');
+    appendToolResult(stateful, 'responses', call, 'found', { replayAssistantCall: false });
     expect(stateful.input).toMatchObject([{ type: 'message' }, { type: 'function_call_output', call_id: 'call_1', output: 'found' }]);
   });
 
@@ -184,6 +185,24 @@ describe('web search request shapes', () => {
     expect(gemini.contents).toHaveLength(1);
   });
 
+  it('forces the injected tool in each native shape and restores the original choice', () => {
+    const cases: Array<[Parameters<typeof forceSearchTool>[1], string]> = [
+      ['chat', 'function'],
+      ['responses', 'function'],
+      ['anthropic', 'tool'],
+      ['gemini', 'ANY'],
+    ];
+    for (const [endpoint, marker] of cases) {
+      const body: Record<string, unknown> = { tool_choice: 'auto', toolConfig: { functionCallingConfig: { mode: 'AUTO' } } };
+      const restore = forceSearchTool(body, endpoint);
+      expect(JSON.stringify(body)).toContain(marker);
+      expect(JSON.stringify(body)).toContain('web_search');
+      restore();
+      expect(body.tool_choice).toBe('auto');
+      expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'AUTO' } });
+    }
+  });
+
   it('forces buffered calls for the two-phase flow', () => {
     expect(bufferedBody({ stream: true }, 'chat')).toEqual({ stream: false });
     expect(bufferedBody({ stream: true, stream_options: { include_usage: true } }, 'responses')).toEqual({ stream: false });
@@ -253,6 +272,8 @@ describe('web search response shapes', () => {
 
     const gemini = toSse({ candidates: [{ content: { parts: [{ text: 'See [1]' }] } }] }, results, 'gemini');
     expect(gemini).toContain('groundingMetadata');
+    expect(gemini.match(/^data: /gm)).toHaveLength(2);
+    expect(gemini).toContain('"text":"See [1]"');
   });
 
   it('renders every Responses output item for streaming clients', () => {

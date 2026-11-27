@@ -57,9 +57,9 @@ function incomingHeaders(request: Request): Record<string, string | undefined> {
   };
 }
 
-function proxyResponse(result: ProxyCallResult, contentType = result.contentType): Response {
+function proxyResponse(result: ProxyCallResult): Response {
   const headers: Record<string, string> = {
-    'content-type': contentType ?? 'application/json',
+    'content-type': result.contentType ?? 'application/json',
     'x-provider-key-id': result.providerKeyId,
   };
   return new Response(result.bodyStream ?? result.bodyText ?? '', { status: result.status, headers });
@@ -191,16 +191,18 @@ async function handleOpenAiProxy(
   if (upstreamPath === '/embeddings' && provider.kind === 'COMMAND_CODE') {
     return jsonError('Command Code providers do not support embeddings', 'invalid_request_error', 400);
   }
+  const envelope = {
+    ...envelopeFor(provider, request, identity, body, parsed, typeof body.model === 'string' ? body.model : null),
+    upstreamPath,
+    upstreamBody: body,
+    clientEndpoint: upstreamPath === '/responses' ? ('responses' as const) : ('chat' as const),
+  };
   try {
-    const result = await scope.get(Tokens.WebSearchRoutingService).proxy(
-      {
-        ...envelopeFor(provider, request, identity, body, parsed, typeof body.model === 'string' ? body.model : null),
-        upstreamPath,
-        upstreamBody: body,
-        clientEndpoint: upstreamPath === '/responses' ? 'responses' : 'chat',
-      },
-      upstreamPath === '/responses' ? 'responses' : 'chat',
-    );
+    // Embeddings are not a chat generation: injecting a web_search tool (or
+    // forcing its use) would corrupt the request shape. Send them straight
+    // through the router.
+    if (upstreamPath === '/embeddings') return proxyResponse(await scope.get(Tokens.RouterService).proxy(envelope));
+    const result = await scope.get(Tokens.WebSearchRoutingService).proxy(envelope, upstreamPath === '/responses' ? 'responses' : 'chat');
     return proxyResponse(result);
   } catch (error) {
     return errorResponse(error);
@@ -304,9 +306,9 @@ async function handleGeminiProxy(
       },
       'gemini',
     );
-    // Gemini responses are always JSON; relay both buffered and streaming
-    // bodies through the shared path rather than dropping a stream here.
-    return proxyResponse(result, 'application/json');
+    // Buffered calls carry JSON; streaming calls carry SSE with the final
+    // grounding metadata. Keep the content type the routing layer chose.
+    return proxyResponse(result);
   } catch (error) {
     return errorResponse(error);
   }

@@ -10,6 +10,7 @@ import {
   bufferedBody,
   bufferedUpstreamPath,
   findSearchToolCalls,
+  forceSearchTool,
   injectSearchTool,
   removeSearchTool,
   stripNativeSearch,
@@ -69,6 +70,9 @@ class WebSearchRoutingService {
     // the model stops searching.
     stripNativeSearch(body, endpoint);
     injectSearchTool(body, endpoint);
+    const restoreToolChoice = forceSearchTool(body, endpoint);
+    const previousResponseId = asRecord(request.upstreamBody).previous_response_id;
+    const hasPreviousResponse = typeof previousResponseId === 'string' && previousResponseId.length > 0;
     let response = await this.callUpstream(request, body, endpoint);
     let rounds = 1;
     const results: SearchResult[] = [];
@@ -85,7 +89,7 @@ class WebSearchRoutingService {
         results.push(...outcome.results);
         contents.push(this.searchClient.formatToolResult(outcome.results, outcome.error, results.length - outcome.results.length));
       }
-      appendToolResults(body, endpoint, calls, contents);
+      appendToolResults(body, endpoint, calls, contents, { replayAssistantCall: !hasPreviousResponse || rounds > 1 });
       response = await this.callUpstream(request, body, endpoint);
       rounds += 1;
     }
@@ -95,6 +99,7 @@ class WebSearchRoutingService {
     // would receive a tool call instead of an answer.
     const tail = this.parse(response);
     if (tail && findSearchToolCalls(tail, endpoint).length > 0) {
+      restoreToolChoice();
       removeSearchTool(body, endpoint);
       appendAnswerDirective(body, endpoint);
       response = await this.callUpstream(request, body, endpoint);
@@ -173,7 +178,7 @@ class WebSearchRoutingService {
     return {
       ...result,
       bodyText: toSse(payload, results, endpoint),
-      contentType: endpoint === 'gemini' ? 'application/json' : 'text/event-stream',
+      contentType: 'text/event-stream',
     };
   }
 }
