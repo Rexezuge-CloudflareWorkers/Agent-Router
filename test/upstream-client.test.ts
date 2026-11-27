@@ -145,6 +145,12 @@ describe('UpstreamClient', () => {
       completionTokens: 7,
       estimated: false,
     });
+    // A buffered /v1/responses call reports input/output tokens.
+    expect(
+      parseUsage('OPENAI', {
+        usage: { input_tokens: 21, output_tokens: 9, total_tokens: 30, input_tokens_details: { cached_tokens: 4 } },
+      }),
+    ).toMatchObject({ promptTokens: 21, completionTokens: 9, estimated: false });
     expect(parseUsage('ANTHROPIC', { usage: { input_tokens: 4, output_tokens: 6 } })).toMatchObject({
       promptTokens: 4,
       completionTokens: 6,

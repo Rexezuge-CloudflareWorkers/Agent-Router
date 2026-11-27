@@ -42,7 +42,14 @@ interface SearchResult {
 }
 
 interface SearchToolCall {
+  /**
+  Tool call id used by function_call_output (call_id on the Responses API).
+  */
   id: string;
+  /**
+  Original assistant item id, needed when replaying a Responses function_call.
+  */
+  itemId?: string;
   query: string;
 }
 

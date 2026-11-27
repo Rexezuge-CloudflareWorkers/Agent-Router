@@ -3,8 +3,14 @@ import { NO_USAGE, joinUrl } from './types';
 
 const DEFAULT_OPENAI_BASE = 'https://api.openai.com/v1';
 
+function tokenCount(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
 /**
-OpenAI Chat/Embeddings: Bearer auth, prompt/completion token usage.
+OpenAI Chat/Embeddings/Responses: Bearer auth. Usage arrives either as
+Chat Completions' prompt/completion tokens or as the Responses API's
+input/output tokens; both bodies pass through on the same adapter.
 */
 const openAiAdapter: ProviderAdapter = {
   kind: 'OPENAI',
@@ -18,10 +24,10 @@ const openAiAdapter: ProviderAdapter = {
   parseUsage(json) {
     const usage = (json as { usage?: Record<string, unknown> } | null)?.usage;
     if (!usage || typeof usage !== 'object') return NO_USAGE;
-    const prompt = typeof usage.prompt_tokens === 'number' ? usage.prompt_tokens : 0;
-    const completion = typeof usage.completion_tokens === 'number' ? usage.completion_tokens : 0;
+    const prompt = tokenCount(usage.input_tokens) ?? tokenCount(usage.prompt_tokens) ?? 0;
+    const completion = tokenCount(usage.output_tokens) ?? tokenCount(usage.completion_tokens) ?? 0;
     if (prompt === 0 && completion === 0) {
-      const total = typeof usage.total_tokens === 'number' ? usage.total_tokens : 0;
+      const total = tokenCount(usage.total_tokens) ?? 0;
       return { promptTokens: total, completionTokens: 0, estimated: total === 0 };
     }
     return { promptTokens: prompt, completionTokens: completion, estimated: false };

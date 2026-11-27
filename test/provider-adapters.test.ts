@@ -60,6 +60,12 @@ describe('provider adapters', () => {
       completionTokens: 2,
       estimated: false,
     });
+    // Responses API dialect (input/output tokens).
+    expect(openAiAdapter.parseUsage({ usage: { input_tokens: 8, output_tokens: 3, total_tokens: 11 } })).toEqual({
+      promptTokens: 8,
+      completionTokens: 3,
+      estimated: false,
+    });
     expect(anthropicAdapter.parseUsage({ usage: { input_tokens: 5, output_tokens: 1 } })).toEqual({
       promptTokens: 5,
       completionTokens: 1,

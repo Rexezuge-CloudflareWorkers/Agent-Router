@@ -16,6 +16,16 @@ describe('tapUsageStream', () => {
     expect(await tap.usage).toEqual({ promptTokens: 2, completionTokens: 1, estimated: false });
   });
 
+  it('reads platform Responses usage from response.completed', async () => {
+    const sse =
+      'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"hi"}\n\n' +
+      'event: response.completed\ndata: {"type":"response.completed","response":{"usage":{"input_tokens":17,"output_tokens":6,"total_tokens":23,"output_tokens_details":{"reasoning_tokens":2}}}}\n\n';
+    const tap = tapUsageStream(upstream(sse));
+
+    expect(await new Response(tap.stream).text()).toBe(sse);
+    expect(await tap.usage).toEqual({ promptTokens: 17, completionTokens: 6, estimated: false });
+  });
+
   it('merges Anthropic message_start and message_delta usage', async () => {
     const sse =
       'data: {"type":"message_start","message":{"usage":{"input_tokens":7,"output_tokens":1}}}\n\n' +

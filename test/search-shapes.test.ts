@@ -84,6 +84,37 @@ describe('web search request shapes', () => {
     expect(findSearchToolCall({ choices: [{ message: { content: 'done' } }] }, 'chat')).toBeNull();
   });
 
+  it('keeps both the Responses item id and the call id for stateful replay', () => {
+    const call = findSearchToolCall(
+      {
+        output: [{ type: 'function_call', id: 'fc_1', call_id: 'call_1', name: 'web_search', arguments: '{"query":"two"}' }],
+      },
+      'responses',
+    );
+    expect(call).toEqual({ id: 'call_1', itemId: 'fc_1', query: 'two' });
+    expect(call).not.toBeNull();
+    if (!call) return;
+
+    const stored: Record<string, unknown> = {
+      input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hi' }] }],
+    };
+    appendToolResult(stored, 'responses', call, 'found');
+    expect(stored.input).toMatchObject([
+      { type: 'message' },
+      { type: 'function_call', id: 'fc_1', call_id: 'call_1', name: 'web_search' },
+      { type: 'function_call_output', call_id: 'call_1', output: 'found' },
+    ]);
+
+    // With a stored prior response only the tool output is sent back.
+    const stateful: Record<string, unknown> = {
+      previous_response_id: 'resp_1',
+      store: true,
+      input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hi' }] }],
+    };
+    appendToolResult(stateful, 'responses', call, 'found');
+    expect(stateful.input).toMatchObject([{ type: 'message' }, { type: 'function_call_output', call_id: 'call_1', output: 'found' }]);
+  });
+
   it('appends the tool call and result in each native request shape', () => {
     const chat: Record<string, unknown> = { messages: [{ role: 'user', content: 'hi' }] };
     appendToolResult(chat, 'chat', { id: 'c1', query: 'q' }, 'found');
@@ -155,6 +186,7 @@ describe('web search request shapes', () => {
 
   it('forces buffered calls for the two-phase flow', () => {
     expect(bufferedBody({ stream: true }, 'chat')).toEqual({ stream: false });
+    expect(bufferedBody({ stream: true, stream_options: { include_usage: true } }, 'responses')).toEqual({ stream: false });
     expect(bufferedUpstreamPath('gemini', '/v1beta/models/g:streamGenerateContent')).toBe('/v1beta/models/g:generateContent');
   });
 });
@@ -221,5 +253,30 @@ describe('web search response shapes', () => {
 
     const gemini = toSse({ candidates: [{ content: { parts: [{ text: 'See [1]' }] } }] }, results, 'gemini');
     expect(gemini).toContain('groundingMetadata');
+  });
+
+  it('renders every Responses output item for streaming clients', () => {
+    const payload = {
+      id: 'r',
+      model: 'm',
+      output_text: 'See [1]',
+      output: [
+        { type: 'reasoning', id: 'rs_1', summary: [{ type: 'summary_text', text: 'thinking' }] },
+        { type: 'function_call', id: 'fc_1', call_id: 'call_1', name: 'other', arguments: '{"a":1}' },
+        { type: 'message', id: 'msg_1', role: 'assistant', content: [{ type: 'output_text', text: 'See [1]' }] },
+      ],
+    };
+    const frames = toSse(payload, results, 'responses');
+
+    expect(frames).toContain('response.reasoning_text.delta');
+    expect(frames).toContain('response.function_call_arguments.done');
+    expect(frames).toContain('"id":"rs_1"');
+    expect(frames).toContain('"id":"fc_1"');
+    expect(frames).toContain('"id":"msg_1"');
+    expect(frames).toContain('response.output_text.annotation.added');
+    const completed = frames.split('\n').findLast((line) => line.startsWith('data: ') && line.includes('"type":"response.completed"'));
+    expect(completed).toBeDefined();
+    const response = JSON.parse(completed?.slice(6) ?? '{}') as { response: { output: Array<{ type: string }> } };
+    expect(response.response.output.map((item) => item.type)).toEqual(['reasoning', 'function_call', 'message']);
   });
 });

@@ -214,4 +214,50 @@ describe('WebSearchRoutingService', () => {
     expect(followUp.rawBodyText).toContain('[1] One');
     expect(followUp.rawBodyText).toContain('[2] Two');
   });
+
+  it('keeps Responses state across a tool round and replays only the tool output', async () => {
+    const call = {
+      output: [{ type: 'function_call', id: 'fc_1', call_id: 'call_1', name: 'web_search', arguments: '{"query":"cloudflare"}' }],
+      usage: { input_tokens: 5, output_tokens: 2, total_tokens: 7 },
+    };
+    const { service, proxy } = harness('third_party', [
+      success(call),
+      success({
+        id: 'r',
+        model: 'm',
+        output_text: 'Answer',
+        output: [{ type: 'message', id: 'msg_1', content: [{ type: 'output_text', text: 'Answer' }] }],
+      }),
+    ]);
+    const body = {
+      model: 'gpt-5',
+      input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hi' }] }],
+      instructions: 'Be brief',
+      previous_response_id: 'resp_0',
+      store: true,
+      reasoning: { effort: 'low' },
+      stream: true,
+      stream_options: { include_usage: true },
+    };
+    const req = { ...request(body), upstreamPath: '/responses', clientStream: true };
+    const result = await service.proxy(req, 'responses');
+
+    expect(proxy).toHaveBeenCalledTimes(2);
+    const first = proxy.mock.calls[0][0] as unknown as ProxyRequest;
+    const second = proxy.mock.calls[1][0] as unknown as ProxyRequest;
+    expect(first.clientStream).toBe(false);
+    expect(first.upstreamBody).toMatchObject({
+      previous_response_id: 'resp_0',
+      store: true,
+      instructions: 'Be brief',
+      reasoning: { effort: 'low' },
+    });
+    expect(first.upstreamBody).not.toHaveProperty('stream_options');
+    expect(second.upstreamBody).toMatchObject({ previous_response_id: 'resp_0', store: true, instructions: 'Be brief' });
+    const input = (second.upstreamBody as { input: Array<{ type?: string }> }).input;
+    expect(input.some((item) => item.type === 'function_call')).toBe(false);
+    expect(input).toMatchObject([{ type: 'message' }, { type: 'function_call_output', call_id: 'call_1' }]);
+    expect(result.contentType).toBe('text/event-stream');
+    expect(result.bodyText).toContain('response.completed');
+  });
 });
