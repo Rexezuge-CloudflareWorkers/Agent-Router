@@ -87,6 +87,17 @@ interface AttemptContext {
 }
 
 type AttemptOutcome =
-  { kind: 'success'; success: ProxySuccess } | { kind: 'failed'; status: number; message: string; accountRouted: boolean };
+  | { kind: 'success'; success: ProxySuccess }
+  | {
+      kind: 'failed';
+      status: number;
+      message: string;
+      accountRouted: boolean;
+      /**
+      False for transport-level failures that say nothing about key health.
+      */
+      penalizeKey?: boolean;
+      code?: string | null;
+    };
 
 export type { AttemptContext, AttemptOutcome, CodexAccessResolver, ProxyRequest, ProxySuccess, RouterServiceDeps, RouterServiceEnv };

@@ -1,6 +1,16 @@
 import type { ProviderKind } from '@agent-router/shared';
-import { BadRequestError } from '@rexezuge/errors';
+import { BadRequestError, ServiceError } from '@rexezuge/errors';
 import { extractHtmlPageText } from '@agent-router/provider-clients/upstream';
+
+/**
+A stream that stayed silent is a 504, not a bad client request. Keeping the
+concrete class in the error taxonomy makes the proxy boundary expose it.
+*/
+class UpstreamIdleError extends ServiceError {
+  constructor(message: string) {
+    super(504, 'UpstreamIdle', message, { expose: true, retryable: true });
+  }
+}
 
 /**
 Maps a non-retryable upstream response body to a client-facing error.
@@ -28,4 +38,4 @@ function withStatusCode(error: unknown, statusCode: number): unknown {
   return error;
 }
 
-export { toUpstreamError, withStatusCode };
+export { UpstreamIdleError, toUpstreamError, withStatusCode };

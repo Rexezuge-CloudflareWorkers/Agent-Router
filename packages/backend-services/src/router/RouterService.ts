@@ -15,7 +15,7 @@ import {
 import type { ParsedUsage, UpstreamCall } from '@agent-router/provider-clients/upstream';
 import { isCapExceeded, isOAuthKey, isOAuthUsable, recordKeyFailure } from './keyHealth';
 import { recordFailedUsage, recordSuccessfulUsage } from './usageRecorder';
-import { toUpstreamError, withStatusCode } from './upstreamErrors';
+import { toUpstreamError, UpstreamIdleError, withStatusCode } from './upstreamErrors';
 import type { AttemptContext, AttemptOutcome, ProxyRequest, ProxySuccess, RouterServiceDeps, RouterServiceEnv } from './types';
 
 class RouterService {
@@ -125,12 +125,24 @@ class RouterService {
     const latencyMs = Date.now() - startedMs;
     if (!response.ok) {
       await recordFailedUsage(context.usageDAO, candidate, req, response.status, latencyMs);
-      return { kind: 'failed', status: response.status, message: response.message, accountRouted: false };
+      return {
+        kind: 'failed',
+        status: response.status,
+        message: response.message,
+        accountRouted: false,
+        // Idle is a slow upstream, not a dead key: don't cool or disable it.
+        penalizeKey: response.code !== 'STREAM_IDLE_TIMEOUT',
+        code: response.code,
+      };
     }
     const success = response.result;
     if ('usagePromise' in success) {
       void success.usagePromise
-        .then((usage) => recordSuccessfulUsage(context.keyDAO, context.usageDAO, candidate, req, usage, latencyMs))
+        .then((usage) =>
+          usage.failed
+            ? recordFailedUsage(context.usageDAO, candidate, req, 504, latencyMs)
+            : recordSuccessfulUsage(context.keyDAO, context.usageDAO, candidate, req, usage, latencyMs),
+        )
         .catch(() => {});
     } else {
       await recordSuccessfulUsage(context.keyDAO, context.usageDAO, candidate, req, success, latencyMs);
@@ -263,6 +275,7 @@ class RouterService {
 
     let lastError = 'Upstream request failed';
     let lastStatus = 502;
+    let lastCode: string | null = null;
     const attempts = Math.min(maxAttempts, usable.length);
     for (let i = 0; i < attempts; i += 1) {
       const candidate = usable[i];
@@ -276,16 +289,21 @@ class RouterService {
         }
         lastStatus = outcome.status;
         lastError = outcome.message;
+        lastCode = outcome.code ?? null;
         if (isRetryableStatus(outcome.status)) {
-          if (outcome.status === 429) {
-            // Rate limits are temporary: keep the key as a last-resort
-            // fallback instead of counting it toward auto-disable.
-            await keyDAO.markDegraded(candidate.id, `Upstream ${outcome.status}`, now).catch(() => {});
-          } else {
-            await recordKeyFailure(keyDAO, candidate, `Upstream ${outcome.status}`, now, {
-              baseMs: context.cooldownBase,
-              disableAfter: context.disableAfter,
-            });
+          // A stream idle is a slow upstream, not a broken key: allow failover
+          // without cooling or disabling perfectly healthy credentials.
+          if (outcome.penalizeKey !== false) {
+            if (outcome.status === 429) {
+              // Rate limits are temporary: keep the key as a last-resort
+              // fallback instead of counting it toward auto-disable.
+              await keyDAO.markDegraded(candidate.id, `Upstream ${outcome.status}`, now).catch(() => {});
+            } else {
+              await recordKeyFailure(keyDAO, candidate, `Upstream ${outcome.status}`, now, {
+                baseMs: context.cooldownBase,
+                disableAfter: context.disableAfter,
+              });
+            }
           }
           continue;
         }
@@ -302,6 +320,7 @@ class RouterService {
         const message = error instanceof Error ? error.message : 'Upstream request failed';
         lastError = message.slice(0, 300);
         lastStatus = 502;
+        lastCode = null;
         // Transient/thrown failures cool the key but do not auto-disable it;
         // only repeated upstream error statuses count toward disable.
         await recordKeyFailure(keyDAO, candidate, message, now, {
@@ -320,6 +339,9 @@ class RouterService {
           ? `All provider keys are rate limited. Upstream: ${detail}`
           : 'All provider keys are rate limited. Try again later.',
       );
+    }
+    if (lastCode === 'STREAM_IDLE_TIMEOUT') {
+      throw new UpstreamIdleError(`Command Code ${lastError}`);
     }
     throw new BadRequestError(lastError.slice(0, 300) || 'Upstream request failed');
   }

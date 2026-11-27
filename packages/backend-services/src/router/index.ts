@@ -2,7 +2,7 @@ export { RouterService } from './RouterService';
 export type { RouterServiceDeps, RouterServiceEnv, ProxyRequest, ProxySuccess, CodexAccessResolver } from './types';
 export { cooldownForFailures, cooldownUntilFor, isCapExceeded, isOAuthKey, isOAuthUsable } from './keyHealth';
 export { recordFailedUsage, recordSuccessfulUsage } from './usageRecorder';
-export { toUpstreamError, withStatusCode } from './upstreamErrors';
+export { toUpstreamError, UpstreamIdleError, withStatusCode } from './upstreamErrors';
 export {
   buildUpstreamCall,
   buildCodexCall,

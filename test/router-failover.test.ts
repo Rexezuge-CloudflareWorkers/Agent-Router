@@ -314,4 +314,74 @@ describe('RouterService failover', () => {
     expect(events).toContain('failure:k1');
     expect(events).toContain('disabled:k1');
   });
+
+  it('does not cool a Command Code key when the upstream stream goes idle', async () => {
+    const k1 = row('k1');
+    k1.encrypted_key = await enc('user_key');
+    const commandCode = {
+      ensureInitialized: async () => {},
+      call: async () => ({
+        ok: false,
+        status: 504,
+        message: 'Upstream stream idle timeout: no data received for 120000ms',
+        retryable: true,
+        code: 'STREAM_IDLE_TIMEOUT',
+      }),
+    };
+    const { svc, events } = makeService([k1], vi.fn() as unknown as typeof fetch, { commandCode });
+    await expect(
+      svc.proxy({
+        userEmail: 'u@x.y',
+        gatewayKeyId: 'gw1',
+        providerId: 'p1',
+        providerKind: 'COMMAND_CODE',
+        providerBaseUrl: 'https://api.commandcode.ai',
+        upstreamPath: '/alpha/generate',
+        upstreamBody: { model: 'x', messages: [] },
+        upstreamModel: 'x',
+        bodyBytes: 10,
+        clientEndpoint: 'chat',
+        clientStream: true,
+      }),
+    ).rejects.toThrow(/idle timeout/);
+    expect(events).not.toContain('failure:k1');
+    expect(events).not.toContain('degraded:k1');
+  });
+
+  it('records a failed ledger row when a relayed stream ends idle', async () => {
+    const k1 = row('k1');
+    k1.encrypted_key = await enc('user_key');
+    const commandCode = {
+      ensureInitialized: async () => {},
+      call: async () => ({
+        ok: true,
+        result: {
+          bodyStream: new ReadableStream<Uint8Array>({ start: (controller) => controller.close() }),
+          contentType: 'text/event-stream',
+          promptTokens: 0,
+          completionTokens: 0,
+          estimated: true,
+          usagePromise: Promise.resolve({ promptTokens: 0, completionTokens: 0, estimated: true, failed: true }),
+        },
+      }),
+    };
+    const { svc, events, usage } = makeService([k1], vi.fn() as unknown as typeof fetch, { commandCode });
+    await svc.proxy({
+      userEmail: 'u@x.y',
+      gatewayKeyId: 'gw1',
+      providerId: 'p1',
+      providerKind: 'COMMAND_CODE',
+      providerBaseUrl: 'https://api.commandcode.ai',
+      upstreamPath: '/alpha/generate',
+      upstreamBody: { model: 'x', messages: [] },
+      upstreamModel: 'x',
+      bodyBytes: 10,
+      clientEndpoint: 'chat',
+      clientStream: true,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(events).not.toContain('success:k1');
+    expect(usage).toHaveLength(1);
+    expect(usage[0].statusCode).toBe(504);
+  });
 });

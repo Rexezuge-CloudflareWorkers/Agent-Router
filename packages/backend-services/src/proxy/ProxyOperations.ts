@@ -101,6 +101,7 @@ function errorResponse(error: unknown): Response {
   if (error instanceof ServiceError) {
     if (error.status === 400) return jsonError(error.message, 'invalid_request_error', 400);
     if (error.status === 404) return jsonError(error.message, 'not_found', 404);
+    if (error.expose && error.status < 600) return jsonError(error.message, 'upstream_error', error.status);
   }
   const statusCode = (error as { statusCode?: number } | null)?.statusCode;
   if (typeof statusCode === 'number' && statusCode >= 400 && statusCode < 600) {

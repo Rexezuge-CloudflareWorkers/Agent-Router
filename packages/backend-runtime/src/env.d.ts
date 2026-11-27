@@ -49,7 +49,7 @@ declare global {
     COMMAND_CODE_MAX_BODY_BYTES?: string;
     COMMAND_CODE_TIMEOUT_MS?: string;
     COMMAND_CODE_STREAM_IDLE_MS?: string;
-    COMMAND_CODE_NONSTREAM_IDLE_MS?: string;
+    COMMAND_CODE_STREAM_HEARTBEAT_MS?: string;
     COMMAND_CODE_MAX_TOOL_IMAGE_MB?: string;
     COMMAND_CODE_MODELS_TTL_MS?: string;
   }
