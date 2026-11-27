@@ -16,6 +16,18 @@ function success(body: unknown): ProxySuccess {
   };
 }
 
+async function streamText(stream: ReadableStream<Uint8Array>): Promise<string> {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let text = '';
+  for (;;) {
+    const read = await reader.read();
+    if (read.done) break;
+    text += decoder.decode(read.value, { stream: true });
+  }
+  return text;
+}
+
 function request(body: Record<string, unknown>): ProxyRequest {
   const rawBodyText = JSON.stringify(body);
   return {
@@ -137,9 +149,10 @@ describe('WebSearchRoutingService', () => {
     ]);
     const req = { ...request({ model: 'gpt-5', messages: [] }), clientStream: true };
     const result = await service.proxy(req, 'chat');
+    const text = await streamText(result.bodyStream!);
     expect(result.contentType).toBe('text/event-stream');
-    expect(result.bodyText).toContain('data: [DONE]');
-    expect(result.bodyText).toContain('annotations');
+    expect(text).toContain('data: [DONE]');
+    expect(text).toContain('annotations');
   });
 
   it('degrades to a tool result when the search provider fails', async () => {
@@ -256,24 +269,26 @@ describe('WebSearchRoutingService', () => {
     };
     const req = { ...request(body), upstreamPath: '/responses', clientStream: true };
     const result = await service.proxy(req, 'responses');
+    const text = await streamText(result.bodyStream!);
 
     expect(proxy).toHaveBeenCalledTimes(2);
     const first = proxy.mock.calls[0][0] as unknown as ProxyRequest;
     const second = proxy.mock.calls[1][0] as unknown as ProxyRequest;
-    expect(first.clientStream).toBe(false);
+    expect(first.clientStream).toBe(true);
     expect(first.upstreamBody).toMatchObject({
+      stream: true,
       previous_response_id: 'resp_0',
       store: true,
       instructions: 'Be brief',
       reasoning: { effort: 'low' },
     });
-    expect(first.upstreamBody).not.toHaveProperty('stream_options');
+    expect(first.upstreamBody).toHaveProperty('stream_options');
     expect(second.upstreamBody).toMatchObject({ previous_response_id: 'resp_0', store: true, instructions: 'Be brief' });
     const input = (second.upstreamBody as { input: Array<{ type?: string }> }).input;
     expect(input.some((item) => item.type === 'function_call')).toBe(false);
     expect(input).toMatchObject([{ type: 'message' }, { type: 'function_call_output', call_id: 'call_1' }]);
     expect(result.contentType).toBe('text/event-stream');
-    expect(result.bodyText).toContain('response.completed');
+    expect(text).toContain('response.completed');
   });
 
   it('replays the second Responses tool call when a stored response is used', async () => {

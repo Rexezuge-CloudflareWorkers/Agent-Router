@@ -56,8 +56,8 @@ function hasToolNamed(body: JsonBody, endpoint: SearchEndpoint): boolean {
 /**
 Adds one generic `web_search` function tool in the client's native shape.
 */
-function injectSearchTool(body: JsonBody, endpoint: SearchEndpoint): void {
-  if (hasToolNamed(body, endpoint)) return;
+function injectSearchTool(body: JsonBody, endpoint: SearchEndpoint): boolean {
+  if (hasToolNamed(body, endpoint)) return false;
   const tools = records(body.tools);
   if (endpoint === 'gemini') {
     const declarations = records(tools[0]?.functionDeclarations);
@@ -68,7 +68,7 @@ function injectSearchTool(body: JsonBody, endpoint: SearchEndpoint): void {
     });
     const first = { ...tools[0], functionDeclarations: declarations };
     body.tools = [first, ...tools.slice(1)];
-    return;
+    return true;
   }
   if (endpoint === 'anthropic') {
     tools.push({
@@ -94,6 +94,7 @@ function injectSearchTool(body: JsonBody, endpoint: SearchEndpoint): void {
     });
   }
   body.tools = tools;
+  return true;
 }
 
 /**

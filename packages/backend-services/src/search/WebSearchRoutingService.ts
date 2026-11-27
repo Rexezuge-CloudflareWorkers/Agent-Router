@@ -16,8 +16,9 @@ import {
   stripNativeSearch,
 } from './requestShapes';
 import { injectCitations, toSse } from './responseShapes';
+import { createStreamAdapter, relayStream } from './stream';
 import { MAX_TOOL_ROUNDS } from './types';
-import type { SearchEndpoint, SearchResult } from './types';
+import type { SearchEndpoint, SearchResult, WebSearchSettings } from './types';
 
 interface WebSearchRoutingDeps {
   settings: WebSearchSettingsService;
@@ -65,6 +66,11 @@ class WebSearchRoutingService {
       return this.router.proxy(request);
     }
 
+    // Streaming clients must see tokens as they arrive, so the tool loop runs
+    // over streamed upstream calls instead of buffering every round. The
+    // buffered path below stays in place for non-streaming clients.
+    if (request.clientStream === true) return this.proxyStreaming(request, settings, endpoint);
+
     // Third-party mode: force buffered upstream calls so tool calls can be
     // detected deterministically, then render the client's native shape once
     // the model stops searching.
@@ -105,7 +111,101 @@ class WebSearchRoutingService {
       response = await this.callUpstream(request, body, endpoint);
     }
 
-    return this.deliver(response, endpoint, request.clientStream === true, results);
+    return this.deliver(response, endpoint, false, results);
+  }
+
+  /**
+  Tool rounds are still detected from complete responses, but the bytes are
+  relayed to the client as they arrive. Only terminal frames (and one
+  Gemini frame) are held back until the loop knows whether another round is
+  needed.
+  */
+  private async proxyStreaming(request: ProxyRequest, settings: WebSearchSettings, endpoint: SearchEndpoint): Promise<ProxySuccess> {
+    const incoming = asRecord(request.upstreamBody);
+    const streamOptions = incoming.stream_options;
+    const originalToolChoice = incoming.tool_choice;
+    const originalToolConfig = incoming.toolConfig;
+    const body = { ...incoming };
+    stripNativeSearch(body, endpoint);
+    const injected = injectSearchTool(body, endpoint);
+    forceSearchTool(body, endpoint);
+    const restoreToolChoice = (target: Record<string, unknown>): void => {
+      if (originalToolChoice === undefined) delete target.tool_choice;
+      else target.tool_choice = originalToolChoice;
+      if (originalToolConfig === undefined) delete target.toolConfig;
+      else target.toolConfig = originalToolConfig;
+    };
+    const roundBody = this.streamingBody(body, endpoint, streamOptions);
+    const adapter = createStreamAdapter(endpoint);
+    const encoder = new TextEncoder();
+    const results: SearchResult[] = [];
+    const previousResponseId = incoming.previous_response_id;
+    const hasPreviousResponse = typeof previousResponseId === 'string' && previousResponseId.length > 0;
+    const first = await this.callUpstream(request, roundBody, endpoint, true);
+
+    const stream = new ReadableStream<Uint8Array>({
+      start: async (controller) => {
+        const emit = (frame: string): void => {
+          if (request.signal?.aborted) return;
+          try {
+            controller.enqueue(encoder.encode(frame));
+          } catch {
+            // The client went away mid-generation; the router owns the abort.
+          }
+        };
+        let current = first;
+        let currentBody = roundBody;
+        try {
+          for (let round = 1; round <= MAX_TOOL_ROUNDS; round += 1) {
+            let rawText = current.bodyText ?? '';
+            let sawFrames = false;
+            if (current.bodyStream) {
+              const relayed = await relayStream(current.bodyStream, adapter, emit, request.signal);
+              rawText = relayed.rawText;
+              sawFrames = relayed.sawFrames;
+            }
+            let payload = adapter.payload();
+            if (!sawFrames && rawText.trim()) {
+              try {
+                payload = JSON.parse(rawText) as unknown;
+              } catch {
+                payload = null;
+              }
+            }
+            const calls = payload ? findSearchToolCalls(payload, endpoint) : [];
+            if (calls.length === 0 || round === MAX_TOOL_ROUNDS) {
+              if (!sawFrames && payload) emit(toSse(payload, results, endpoint));
+              else for (const frame of adapter.finish(results)) emit(frame);
+              break;
+            }
+
+            const contents: string[] = [];
+            for (const call of calls) {
+              const outcome = await this.runSearch(call.query, request, settings.selectedProviderId);
+              results.push(...outcome.results);
+              contents.push(this.searchClient.formatToolResult(outcome.results, outcome.error, results.length - outcome.results.length));
+            }
+            // Never mutate the body handed to an earlier call: tests and
+            // usage records keep that snapshot, and each round needs its own
+            // request state.
+            currentBody = { ...currentBody };
+            appendToolResults(currentBody, endpoint, calls, contents, { replayAssistantCall: !hasPreviousResponse || round > 1 });
+            if (injected) {
+              restoreToolChoice(currentBody);
+              removeSearchTool(currentBody, endpoint);
+            }
+            adapter.nextRound();
+            currentBody = this.streamingBody(currentBody, endpoint, streamOptions);
+            current = await this.callUpstream(request, currentBody, endpoint, true);
+          }
+          controller.close();
+        } catch (error) {
+          controller.error(error);
+        }
+      },
+    });
+
+    return { ...first, bodyStream: stream, contentType: 'text/event-stream' };
   }
 
   /**
@@ -132,10 +232,25 @@ class WebSearchRoutingService {
     return { results: [], error: lastError };
   }
 
-  private callUpstream(request: ProxyRequest, body: Record<string, unknown>, endpoint: SearchEndpoint): Promise<ProxySuccess> {
+  private callUpstream(
+    request: ProxyRequest,
+    body: Record<string, unknown>,
+    endpoint: SearchEndpoint,
+    streaming = false,
+  ): Promise<ProxySuccess> {
+    if (streaming) return this.router.proxy(this.withBody(request, body, request.upstreamPath, true));
     return this.router.proxy(
       this.withBody(request, bufferedBody(body, endpoint), bufferedUpstreamPath(endpoint, request.upstreamPath), false),
     );
+  }
+
+  private streamingBody(body: Record<string, unknown>, endpoint: SearchEndpoint, streamOptions: unknown): Record<string, unknown> {
+    const copy = { ...body };
+    if (endpoint === 'gemini') return copy;
+    copy.stream = true;
+    if (streamOptions === undefined) delete copy.stream_options;
+    else copy.stream_options = streamOptions;
+    return copy;
   }
 
   private parse(result: ProxySuccess): unknown {

@@ -297,15 +297,15 @@ async function handleGeminiProxy(
   if (provider.kind !== 'GEMINI') {
     return jsonError('Resolved provider is not Gemini; set x-provider-id', 'invalid_request_error', 400);
   }
+  const envelope = {
+    ...envelopeFor(provider, request, identity, body, parsed, model),
+    // Gemini carries streaming in the action, not a `stream` body field.
+    clientStream: match[2] === 'streamGenerateContent' || body.stream === true,
+    upstreamPath: `/v1beta/${model}:${match[2]}`,
+    upstreamBody: body,
+  };
   try {
-    const result = await scope.get(Tokens.WebSearchRoutingService).proxy(
-      {
-        ...envelopeFor(provider, request, identity, body, parsed, model),
-        upstreamPath: `/v1beta/${model}:${match[2]}`,
-        upstreamBody: body,
-      },
-      'gemini',
-    );
+    const result = await scope.get(Tokens.WebSearchRoutingService).proxy(envelope, 'gemini');
     // Buffered calls carry JSON; streaming calls carry SSE with the final
     // grounding metadata. Keep the content type the routing layer chose.
     return proxyResponse(result);
