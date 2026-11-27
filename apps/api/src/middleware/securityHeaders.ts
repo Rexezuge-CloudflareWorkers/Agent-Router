@@ -22,7 +22,8 @@ function isSensitiveJsonPath(pathname: string): boolean {
     pathname === '/user/gateway-keys' ||
     pathname.startsWith('/user/gateway-keys/') ||
     pathname === '/user/providers' ||
-    pathname.startsWith('/user/providers/')
+    pathname.startsWith('/user/providers/') ||
+    pathname === '/user/settings/web-search'
   );
 }
 

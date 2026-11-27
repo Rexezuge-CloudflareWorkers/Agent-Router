@@ -20,6 +20,7 @@ export async function ensureAesSecret(env: TestEnv): Promise<void> {
   await ensureSecret(env, 'PROVIDER_KEYS_ENCRYPTION_SECRET');
   await ensureSecret(env, 'CODEX_OAUTH_ENCRYPTION_SECRET');
   await ensureSecret(env, 'COMMAND_CODE_FINGERPRINT_SALT');
+  await ensureSecret(env, 'WEB_SEARCH_ENCRYPTION_SECRET');
 }
 
 export async function ensureUser(db: D1Database, email: string): Promise<void> {

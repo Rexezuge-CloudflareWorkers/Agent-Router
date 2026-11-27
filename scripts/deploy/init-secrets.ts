@@ -32,6 +32,7 @@ const SECRET_NAMES = {
   providerKeys: 'agent-router-provider-keys-encryption-key',
   codexOAuth: 'agent-router-codex-oauth-encryption-key',
   commandCodeFingerprintSalt: 'agent-router-command-code-fingerprint-salt',
+  webSearch: 'agent-router-web-search-encryption-key',
 } as const;
 
 /**
@@ -43,6 +44,7 @@ const SECRET_GENERATORS: Readonly<Record<string, () => Promise<string>>> = {
   [SECRET_NAMES.providerKeys]: generateAESGCMKey,
   [SECRET_NAMES.codexOAuth]: generateAESGCMKey,
   [SECRET_NAMES.commandCodeFingerprintSalt]: generateFingerprintSalt,
+  [SECRET_NAMES.webSearch]: generateAESGCMKey,
 };
 
 /**

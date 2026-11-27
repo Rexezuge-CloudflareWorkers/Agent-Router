@@ -4,6 +4,17 @@ export interface CurrentUser {
   preferredLanguage?: string | null;
 }
 
+export type WebSearchMode = 'none' | 'native' | 'third_party';
+
+export type SearchProviderKind = 'BRAVE' | 'TAVILY';
+
+export interface WebSearchSettings {
+  mode: WebSearchMode;
+  provider: SearchProviderKind | null;
+  keyHint: string | null;
+  updatedAt: number | null;
+}
+
 export type PeakPreferenceMode = 'continue' | 'fallback' | 'reject';
 
 export interface PeakPreference {

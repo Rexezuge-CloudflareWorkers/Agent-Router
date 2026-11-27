@@ -40,6 +40,7 @@ declare global {
     REALTIME_MAX_CONN_PER_REPO_SHARD?: string;
     REALTIME_MAX_CONN_PER_INBOX_SHARD?: string;
     COMMAND_CODE_FINGERPRINT_SALT?: { get(): Promise<string> };
+    WEB_SEARCH_ENCRYPTION_SECRET?: { get(): Promise<string> };
     COMMAND_CODE_PROTOCOL_VERSION?: string;
     COMMAND_CODE_DEVICE_PROJECT_DIR?: string;
     COMMAND_CODE_CLI_MODE?: string;

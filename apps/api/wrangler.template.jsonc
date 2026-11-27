@@ -67,6 +67,11 @@
       "store_id": "00000000000000000000000000000000",
       "secret_name": "agent-router-command-code-fingerprint-salt",
     },
+    {
+      "binding": "WEB_SEARCH_ENCRYPTION_SECRET",
+      "store_id": "00000000000000000000000000000000",
+      "secret_name": "agent-router-web-search-encryption-key",
+    },
   ],
   "triggers": {
     "crons": ["*/10 * * * *"],

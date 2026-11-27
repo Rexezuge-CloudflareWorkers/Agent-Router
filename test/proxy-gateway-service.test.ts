@@ -28,6 +28,7 @@ function scopeWith(
       }
       if (token === Tokens.ProviderService) return { listProviders: async () => [resolvedProvider] };
       if (token === Tokens.RouterService) return { proxy };
+      if (token === Tokens.WebSearchRoutingService) return { proxy: async (input: unknown) => proxy(input as Record<string, unknown>) };
       if (token === Tokens.GatewayKeyService) {
         return {
           getPeakPreference: async (keyId: string) => {

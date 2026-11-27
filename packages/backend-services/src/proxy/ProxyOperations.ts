@@ -1,8 +1,9 @@
 import type { Container } from '@agent-router/backend-runtime/di';
 import type { ProviderKind } from '@agent-router/shared';
-import { NotFoundError, RateLimitedError, ServiceError } from '@rexezuge/errors';
+import { RateLimitedError, ServiceError } from '@rexezuge/errors';
 import { Tokens, createRequestScope } from '../composition/index';
 import { applyPeakPolicy } from './peakPolicy';
+import { inferKind, nativeSearchExclusions, resolveProviderId } from './providerResolution';
 
 type ProxyOperationsEnv = Parameters<typeof createRequestScope>[0];
 type ProxyScopeFactory = (env: ProxyOperationsEnv) => Container;
@@ -18,73 +19,6 @@ interface ProxyCallResult {
   bodyStream?: ReadableStream<Uint8Array>;
   contentType: string | null;
   providerKeyId: string;
-}
-
-const COMMAND_CODE_MODEL_PREFIXES = [
-  'deepseek/',
-  'moonshotai/',
-  'zai-org/',
-  'minimaxai/',
-  'qwen/',
-  'stepfun/',
-  'xiaomi/',
-  'google/gemini-',
-];
-
-function inferKind(model: unknown): ProviderKind | null {
-  if (typeof model !== 'string') return null;
-  const m = model.toLowerCase();
-  if (m.startsWith('claude-')) return 'ANTHROPIC';
-  if (m.startsWith('gemini-') || m.startsWith('models/gemini-')) return 'GEMINI';
-  if (COMMAND_CODE_MODEL_PREFIXES.some((prefix) => m.startsWith(prefix))) return 'COMMAND_CODE';
-  return m.startsWith('gpt-') ||
-    m.startsWith('o1-') ||
-    m.startsWith('o3-') ||
-    m.startsWith('o4-') ||
-    m.startsWith('text-embedding-') ||
-    m.startsWith('whisper-') ||
-    m.startsWith('dall-e-') ||
-    m.startsWith('tts-')
-    ? 'OPENAI'
-    : null;
-}
-
-async function resolveProviderId(
-  scope: Container,
-  userEmail: string,
-  opts: { kind: ProviderKind | null; explicitId: string | null },
-): Promise<{ id: string; kind: ProviderKind; baseUrl: string | null }> {
-  const svc = scope.get(Tokens.ProviderService);
-  const all = await svc.listProviders(userEmail);
-  const providers = all.filter((p) => p.status === 'active');
-  if (opts.explicitId) {
-    const found = providers.find((p) => p.id === opts.explicitId);
-    if (!found) throw new NotFoundError('Provider not found');
-    return { id: found.id, kind: found.kind, baseUrl: found.baseUrl };
-  }
-  if (opts.kind) {
-    const found = providers.find((p) => p.kind === opts.kind);
-    if (found) return { id: found.id, kind: found.kind, baseUrl: found.baseUrl };
-    // Responses requests fall back to Codex OAuth when no static OpenAI
-    // provider exists (chat/embeddings via Codex are rejected below with
-    // guidance — the Codex backend only serves the Responses API).
-    if (opts.kind === 'OPENAI') {
-      const codex = providers.find((p) => p.kind === 'OPENAI_CODEX');
-      if (codex) return { id: codex.id, kind: codex.kind, baseUrl: codex.baseUrl };
-    }
-    // Anthropic-shaped traffic can be served by Command Code (it speaks the
-    // Messages API), so fall back when no Anthropic provider is configured.
-    // Unknown model prefixes are also common for Command Code's namespaced
-    // models, so use the only active Command Code provider instead of failing.
-    if (opts.kind === 'OPENAI' || opts.kind === 'ANTHROPIC') {
-      const commandCode = providers.find((p) => p.kind === 'COMMAND_CODE');
-      if (commandCode) return { id: commandCode.id, kind: commandCode.kind, baseUrl: commandCode.baseUrl };
-    }
-    throw new NotFoundError(`No active ${opts.kind} provider. Add one under /user/providers.`);
-  }
-  const fallback = providers[0];
-  if (!fallback) throw new NotFoundError('No providers configured. Add one under /user/providers.');
-  return { id: fallback.id, kind: fallback.kind, baseUrl: fallback.baseUrl };
 }
 
 /**
@@ -234,6 +168,7 @@ async function handleOpenAiProxy(
     provider = await resolveProviderId(scope, identity.userEmail, {
       kind: inferKind(body.model) ?? 'OPENAI',
       explicitId: readProviderHeader(request),
+      excludeKinds: await nativeSearchExclusions(scope, identity.userEmail),
     });
   } catch (error) {
     return errorResponse(error);
@@ -257,12 +192,15 @@ async function handleOpenAiProxy(
     return jsonError('Command Code providers do not support embeddings', 'invalid_request_error', 400);
   }
   try {
-    const result = await scope.get(Tokens.RouterService).proxy({
-      ...envelopeFor(provider, request, identity, body, parsed, typeof body.model === 'string' ? body.model : null),
-      upstreamPath,
-      upstreamBody: body,
-      clientEndpoint: upstreamPath === '/responses' ? 'responses' : 'chat',
-    });
+    const result = await scope.get(Tokens.WebSearchRoutingService).proxy(
+      {
+        ...envelopeFor(provider, request, identity, body, parsed, typeof body.model === 'string' ? body.model : null),
+        upstreamPath,
+        upstreamBody: body,
+        clientEndpoint: upstreamPath === '/responses' ? 'responses' : 'chat',
+      },
+      upstreamPath === '/responses' ? 'responses' : 'chat',
+    );
     return proxyResponse(result);
   } catch (error) {
     return errorResponse(error);
@@ -288,7 +226,11 @@ async function handleAnthropicProxy(
 
   let provider: { id: string; kind: ProviderKind; baseUrl: string | null };
   try {
-    provider = await resolveProviderId(scope, identity.userEmail, { kind: 'ANTHROPIC', explicitId: readProviderHeader(request) });
+    provider = await resolveProviderId(scope, identity.userEmail, {
+      kind: 'ANTHROPIC',
+      explicitId: readProviderHeader(request),
+      excludeKinds: await nativeSearchExclusions(scope, identity.userEmail),
+    });
   } catch (error) {
     return errorResponse(error);
   }
@@ -296,12 +238,15 @@ async function handleAnthropicProxy(
     return jsonError('Resolved provider is not Anthropic; set x-provider-id', 'invalid_request_error', 400);
   }
   try {
-    const result = await scope.get(Tokens.RouterService).proxy({
-      ...envelopeFor(provider, request, identity, body, parsed, typeof body.model === 'string' ? body.model : null),
-      upstreamPath: '/v1/messages',
-      upstreamBody: body,
-      clientEndpoint: 'anthropic',
-    });
+    const result = await scope.get(Tokens.WebSearchRoutingService).proxy(
+      {
+        ...envelopeFor(provider, request, identity, body, parsed, typeof body.model === 'string' ? body.model : null),
+        upstreamPath: '/v1/messages',
+        upstreamBody: body,
+        clientEndpoint: 'anthropic',
+      },
+      'anthropic',
+    );
     return proxyResponse(result);
   } catch (error) {
     return errorResponse(error);
@@ -336,7 +281,11 @@ async function handleGeminiProxy(
 
   let provider: { id: string; kind: ProviderKind; baseUrl: string | null };
   try {
-    provider = await resolveProviderId(scope, identity.userEmail, { kind: 'GEMINI', explicitId: readProviderHeader(request) });
+    provider = await resolveProviderId(scope, identity.userEmail, {
+      kind: 'GEMINI',
+      explicitId: readProviderHeader(request),
+      excludeKinds: await nativeSearchExclusions(scope, identity.userEmail),
+    });
   } catch (error) {
     return errorResponse(error);
   }
@@ -344,11 +293,14 @@ async function handleGeminiProxy(
     return jsonError('Resolved provider is not Gemini; set x-provider-id', 'invalid_request_error', 400);
   }
   try {
-    const result = await scope.get(Tokens.RouterService).proxy({
-      ...envelopeFor(provider, request, identity, body, parsed, model),
-      upstreamPath: `/v1beta/${model}:${match[2]}`,
-      upstreamBody: body,
-    });
+    const result = await scope.get(Tokens.WebSearchRoutingService).proxy(
+      {
+        ...envelopeFor(provider, request, identity, body, parsed, model),
+        upstreamPath: `/v1beta/${model}:${match[2]}`,
+        upstreamBody: body,
+      },
+      'gemini',
+    );
     // Gemini responses are always JSON; relay both buffered and streaming
     // bodies through the shared path rather than dropping a stream here.
     return proxyResponse(result, 'application/json');
@@ -379,5 +331,7 @@ async function listCommandCodeModels(
   return models.map((model) => ({ id: model.id, name: model.name, providerId: provider.id }));
 }
 
-export { errorResponse, handleAnthropicProxy, handleGeminiProxy, handleOpenAiProxy, inferKind, listCommandCodeModels, resolveProviderId };
+export { errorResponse, handleAnthropicProxy, handleGeminiProxy, handleOpenAiProxy, listCommandCodeModels };
 export type { ProxyIdentity, ProxyOperationsEnv, ProxyScopeFactory };
+
+export { inferKind, resolveProviderId } from './providerResolution';

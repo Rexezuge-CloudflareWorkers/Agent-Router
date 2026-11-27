@@ -28,6 +28,10 @@
     {
       "name": "0007_gateway_key_peak_preferences.sql",
       "sha256": "540e6c6f91e71de06780aa7ac96c91e79ec3a1da92761c08789a3fb9b3fb437d"
+    },
+    {
+      "name": "0008_web_search_settings.sql",
+      "sha256": "b26ef196216852c8d5eddb19fa136cc13ef04a79033e4c037ac90aaeec58bd57"
     }
   ]
 }
