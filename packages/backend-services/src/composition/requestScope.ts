@@ -5,6 +5,8 @@ import {
   GatewayKeyPeakPreferenceDAO,
   ProviderDAO,
   ProviderKeyDAO,
+  SearchProviderDAO,
+  SearchProviderKeyDAO,
   UsageLedgerDAO,
   UserDAO,
   WebSearchSettingsDAO,
@@ -20,7 +22,13 @@ import { CommandCodeService } from '@agent-router/backend-services/commandcode/C
 import { GatewayKeyService } from '@agent-router/backend-services/gateway';
 import { ProviderKeyService, ProviderService } from '@agent-router/backend-services/provider';
 import { RouterService } from '@agent-router/backend-services/router';
-import { WebSearchRoutingService, WebSearchSettingsService } from '@agent-router/backend-services/search';
+import {
+  SearchKeyPoolService,
+  SearchProviderKeyService,
+  SearchProviderService,
+  WebSearchRoutingService,
+  WebSearchSettingsService,
+} from '@agent-router/backend-services/search';
 import { UsageService } from '@agent-router/backend-services/usage';
 import { UserService } from '@agent-router/backend-services/user';
 import { Tokens } from './tokens';
@@ -73,6 +81,8 @@ function createRequestScope(env: RequestScopeEnv): Container {
     ['CommandCodeKeyStateDAO', () => Promise.resolve(new CommandCodeKeyStateDAO(env.DB))],
     ['UsageLedgerDAO', () => Promise.resolve(new UsageLedgerDAO(env.DB))],
     ['WebSearchSettingsDAO', () => Promise.resolve(new WebSearchSettingsDAO(env.DB))],
+    ['SearchProviderDAO', () => Promise.resolve(new SearchProviderDAO(env.DB))],
+    ['SearchProviderKeyDAO', () => Promise.resolve(new SearchProviderKeyDAO(env.DB))],
   ];
   const daoFactories = {} as Record<string, () => Promise<unknown>>;
   for (const [tokenName, create] of daoDefs) {
@@ -91,6 +101,8 @@ function createRequestScope(env: RequestScopeEnv): Container {
   const commandCodeKeyStateDAO = getDao<CommandCodeKeyStateDAO>('CommandCodeKeyStateDAO');
   const usageDAO = getDao<UsageLedgerDAO>('UsageLedgerDAO');
   const webSearchSettingsDAO = getDao<WebSearchSettingsDAO>('WebSearchSettingsDAO');
+  const searchProviderDAO = getDao<SearchProviderDAO>('SearchProviderDAO');
+  const searchProviderKeyDAO = getDao<SearchProviderKeyDAO>('SearchProviderKeyDAO');
 
   scope.bind(Tokens.AccessAuthService, () => new AccessAuthService(env as never));
   scope.bind(Tokens.UserService, () => new UserService(env as never, { userDAO }));
@@ -137,7 +149,27 @@ function createRequestScope(env: RequestScopeEnv): Container {
   );
   scope.bind(
     Tokens.WebSearchSettingsService,
-    () => new WebSearchSettingsService(env as never, { dao: webSearchSettingsDAO, masterKey: webSearchKey }),
+    () => new WebSearchSettingsService(env as never, { dao: webSearchSettingsDAO, searchProviderDAO }),
+  );
+  scope.bind(Tokens.SearchProviderService, () => new SearchProviderService(env as never, { dao: searchProviderDAO, config }));
+  scope.bind(
+    Tokens.SearchProviderKeyService,
+    () =>
+      new SearchProviderKeyService(env as never, {
+        providerDAO: searchProviderDAO,
+        keyDAO: searchProviderKeyDAO,
+        masterKey: webSearchKey,
+        config,
+      }),
+  );
+  scope.bind(
+    Tokens.SearchKeyPoolService,
+    () =>
+      new SearchKeyPoolService(env as never, {
+        keyDAO: searchProviderKeyDAO,
+        keyService: () => scope.get(Tokens.SearchProviderKeyService),
+        config,
+      }),
   );
   scope.bind(
     Tokens.WebSearchRoutingService,
@@ -145,6 +177,7 @@ function createRequestScope(env: RequestScopeEnv): Container {
       new WebSearchRoutingService({
         settings: scope.get(Tokens.WebSearchSettingsService),
         router: scope.get(Tokens.RouterService),
+        keyPool: scope.get(Tokens.SearchKeyPoolService),
       }),
   );
   scope.bind(Tokens.UsageService, () => new UsageService(env as never, { usageDAO }));

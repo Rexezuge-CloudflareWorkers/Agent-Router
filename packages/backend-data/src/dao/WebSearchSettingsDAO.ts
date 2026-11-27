@@ -3,9 +3,7 @@ import { BaseDAO } from './BaseDAO';
 export interface WebSearchSettingsRow {
   user_email: string;
   mode: string;
-  provider: string | null;
-  encrypted_api_key: string | null;
-  key_hint: string | null;
+  selected_provider_id: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -18,29 +16,20 @@ class WebSearchSettingsDAO extends BaseDAO {
       .first<WebSearchSettingsRow>();
   }
 
-  public async upsert(
-    userEmail: string,
-    mode: string,
-    provider: string | null,
-    encryptedApiKey: string | null,
-    keyHint: string | null,
-    now: number,
-  ): Promise<void> {
+  public async upsert(userEmail: string, mode: string, selectedProviderId: string | null, now: number): Promise<void> {
     await this.run(
       () =>
         this.database
           .prepare(
             `INSERT INTO user_web_search_settings
-              (user_email, mode, provider, encrypted_api_key, key_hint, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)
+              (user_email, mode, selected_provider_id, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?)
              ON CONFLICT(user_email) DO UPDATE SET
                mode = excluded.mode,
-               provider = excluded.provider,
-               encrypted_api_key = excluded.encrypted_api_key,
-               key_hint = excluded.key_hint,
+               selected_provider_id = excluded.selected_provider_id,
                updated_at = excluded.updated_at`,
           )
-          .bind(userEmail.toLowerCase(), mode, provider, encryptedApiKey, keyHint, now, now)
+          .bind(userEmail.toLowerCase(), mode, selectedProviderId, now, now)
           .run(),
       'upsert web search settings',
     );

@@ -1,8 +1,9 @@
 import { asRecord } from '@agent-router/provider-clients/shared/coercion';
 import { BadRequestError } from '@rexezuge/errors';
 import type { ProxyRequest, ProxySuccess, RouterService } from '../router';
-import { WebSearchClient } from './WebSearchClient';
-import { WebSearchSettingsService } from './WebSearchSettingsService';
+import { SearchProviderError, WebSearchClient } from './WebSearchClient';
+import { SearchKeyPoolService } from './SearchKeyPoolService';
+import type { WebSearchSettingsService } from './WebSearchSettingsService';
 import {
   appendAnswerDirective,
   appendToolResults,
@@ -20,22 +21,31 @@ import type { SearchEndpoint, SearchResult } from './types';
 interface WebSearchRoutingDeps {
   settings: WebSearchSettingsService;
   router: RouterService;
+  keyPool: SearchKeyPoolService;
   searchClient?: WebSearchClient;
+}
+
+interface SearchOutcome {
+  results: SearchResult[];
+  error?: string;
 }
 
 /**
 Single orchestration point for web search. It sits above `RouterService`:
-each upstream call still gets normal key selection, failover and metering,
-while this service owns mode selection, body rewrites and response shaping.
+each upstream LLM call still gets normal key selection, failover and
+metering, while this service owns mode selection, body rewrites, response
+shaping and search-credential failover.
 */
 class WebSearchRoutingService {
   private readonly settings: WebSearchSettingsService;
   private readonly router: RouterService;
+  private readonly keyPool: SearchKeyPoolService;
   private readonly searchClient: WebSearchClient;
 
   constructor(deps: WebSearchRoutingDeps) {
     this.settings = deps.settings;
     this.router = deps.router;
+    this.keyPool = deps.keyPool;
     this.searchClient = deps.searchClient ?? new WebSearchClient();
   }
 
@@ -62,7 +72,6 @@ class WebSearchRoutingService {
     let response = await this.callUpstream(request, body, endpoint);
     let rounds = 1;
     const results: SearchResult[] = [];
-    let credential: { provider: 'BRAVE' | 'TAVILY'; apiKey: string } | undefined;
 
     while (rounds < MAX_TOOL_ROUNDS) {
       const payload = this.parse(response);
@@ -72,18 +81,9 @@ class WebSearchRoutingService {
 
       const contents: string[] = [];
       for (const call of calls) {
-        try {
-          credential ??= await this.settings.decryptApiKey(request.userEmail);
-          const found = await this.searchClient.search(credential.provider, call.query, credential.apiKey, request.signal);
-          const startIndex = results.length;
-          results.push(...found);
-          contents.push(this.searchClient.formatToolResult(found, undefined, startIndex));
-        } catch (error) {
-          // A failed search degrades to a tool result the model can explain,
-          // instead of turning an otherwise valid completion into a hard error.
-          const message = error instanceof Error ? error.message.slice(0, 200) : 'Unknown search error';
-          contents.push(this.searchClient.formatToolResult([], message));
-        }
+        const outcome = await this.runSearch(call.query, request, settings.selectedProviderId);
+        results.push(...outcome.results);
+        contents.push(this.searchClient.formatToolResult(outcome.results, outcome.error, results.length - outcome.results.length));
       }
       appendToolResults(body, endpoint, calls, contents);
       response = await this.callUpstream(request, body, endpoint);
@@ -101,6 +101,30 @@ class WebSearchRoutingService {
     }
 
     return this.deliver(response, endpoint, request.clientStream === true, results);
+  }
+
+  /**
+  Tries the selected provider's keys first, then every other active search
+  provider. A failed search still degrades to a tool result the model can
+  explain instead of turning an otherwise valid completion into an error.
+  */
+  private async runSearch(query: string, request: ProxyRequest, preferredProviderId: string | null): Promise<SearchOutcome> {
+    const candidates = await this.keyPool.select(request.userEmail, preferredProviderId).catch(() => []);
+    if (candidates.length === 0) return { results: [], error: 'Web search is not configured' };
+    let lastError = 'Web search is unavailable';
+    for (const candidate of candidates) {
+      try {
+        const found = await this.searchClient.search(candidate.kind, query, candidate.apiKey, request.signal);
+        await this.keyPool.recordSuccess(candidate.keyId);
+        return { results: found };
+      } catch (error) {
+        const status = error instanceof SearchProviderError ? error.status : undefined;
+        lastError = error instanceof Error ? error.message.slice(0, 200) : 'Unknown search error';
+        await this.keyPool.recordFailure(candidate, { status, message: lastError });
+        if (request.signal?.aborted) break;
+      }
+    }
+    return { results: [], error: lastError };
   }
 
   private callUpstream(request: ProxyRequest, body: Record<string, unknown>, endpoint: SearchEndpoint): Promise<ProxySuccess> {

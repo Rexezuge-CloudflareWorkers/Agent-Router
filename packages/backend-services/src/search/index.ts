@@ -1,4 +1,10 @@
-export { WebSearchClient } from './WebSearchClient';
+export { SearchKeyPoolService } from './SearchKeyPoolService';
+export type { SearchKeyCandidate, SearchKeyPoolDeps } from './SearchKeyPoolService';
+export { SearchProviderKeyService } from './SearchProviderKeyService';
+export type { SearchProviderKeyServiceDeps, SearchProviderKeyServiceEnv } from './SearchProviderKeyService';
+export { SearchProviderService } from './SearchProviderService';
+export type { SearchProviderServiceDeps, SearchProviderServiceEnv } from './SearchProviderService';
+export { SearchProviderError, WebSearchClient } from './WebSearchClient';
 export { WebSearchRoutingService } from './WebSearchRoutingService';
 export { WebSearchSettingsService } from './WebSearchSettingsService';
 export { MAX_SEARCH_RESULTS, WEB_SEARCH_TOOL_NAME, isSearchProviderKind, isWebSearchMode } from './types';

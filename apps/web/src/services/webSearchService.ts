@@ -7,8 +7,7 @@ export async function loadWebSearchSettings(): Promise<WebSearchSettings> {
 
 export async function saveWebSearchSettings(input: {
   mode: WebSearchSettings['mode'];
-  provider?: string | null;
-  apiKey?: string;
+  selectedProviderId?: string | null;
 }): Promise<WebSearchSettings> {
   return apiPatch<WebSearchSettings>('/user/settings/web-search', input);
 }

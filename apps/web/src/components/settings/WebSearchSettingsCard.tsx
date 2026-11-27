@@ -1,30 +1,36 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { loadWebSearchSettings, saveWebSearchSettings } from '../../services/webSearchService';
-import type { SearchProviderKind, WebSearchMode, WebSearchSettings } from '../../types';
+import { listSearchProviderKeys, listSearchProviders } from '../../services/searchProviderService';
+import type { SearchProvider, WebSearchMode, WebSearchSettings } from '../../types';
 import { Button } from '../ui/Button';
 import { Card, CardDescription, CardHeader, CardTitle } from '../ui/Card';
-import { Field, Input, Select } from '../ui/Input';
+import { Field, Select } from '../ui/Input';
 
 const MODES: WebSearchMode[] = ['none', 'native', 'third_party'];
-const PROVIDERS: SearchProviderKind[] = ['BRAVE', 'TAVILY'];
 
 export function WebSearchSettingsCard({ showNotice }: { showNotice: (type: 'success' | 'error', text: string) => void }) {
   const { t } = useTranslation();
   const [settings, setSettings] = useState<WebSearchSettings | null>(null);
   const [mode, setMode] = useState<WebSearchMode>('none');
-  const [provider, setProvider] = useState<SearchProviderKind>('BRAVE');
-  const [apiKey, setApiKey] = useState('');
+  const [selectedProviderId, setSelectedProviderId] = useState('');
+  const [providers, setProviders] = useState<SearchProvider[]>([]);
+  const [keyHint, setKeyHint] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    void loadWebSearchSettings()
-      .then((loaded) => {
+    void Promise.all([loadWebSearchSettings(), listSearchProviders()])
+      .then(async ([loaded, list]) => {
         if (cancelled) return;
         setSettings(loaded);
         setMode(loaded.mode);
-        setProvider(loaded.provider ?? 'BRAVE');
+        setSelectedProviderId(loaded.selectedProviderId ?? '');
+        setProviders(list);
+        if (!loaded.selectedProviderId) return;
+        const keys = await listSearchProviderKeys(loaded.selectedProviderId).catch(() => []);
+        if (!cancelled) setKeyHint(keys.find((key) => key.status !== 'disabled')?.keyHint ?? null);
       })
       .catch(() => {
         if (!cancelled) showNotice('error', t('settings.webSearchLoadFailed', 'Failed to load web search settings.'));
@@ -34,17 +40,25 @@ export function WebSearchSettingsCard({ showNotice }: { showNotice: (type: 'succ
     };
   }, [showNotice, t]);
 
+  const onProviderChange = async (id: string) => {
+    setSelectedProviderId(id);
+    if (!id) {
+      setKeyHint(null);
+      return;
+    }
+    const keys = await listSearchProviderKeys(id).catch(() => []);
+    setKeyHint(keys.find((key) => key.status !== 'disabled')?.keyHint ?? null);
+  };
+
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setSaving(true);
     try {
       const saved = await saveWebSearchSettings({
         mode,
-        provider: mode === 'third_party' ? provider : null,
-        apiKey: mode === 'third_party' ? apiKey : undefined,
+        selectedProviderId: mode === 'third_party' ? selectedProviderId || null : null,
       });
       setSettings(saved);
-      setApiKey('');
       showNotice('success', t('settings.webSearchUpdated', 'Web search settings updated.'));
     } catch (error) {
       showNotice('error', error instanceof Error ? error.message : t('settings.webSearchFailed', 'Failed to update web search settings.'));
@@ -78,33 +92,29 @@ export function WebSearchSettingsCard({ showNotice }: { showNotice: (type: 'succ
         </Field>
         {mode === 'third_party' && (
           <>
-            <Field label={t('settings.webSearchProvider', 'Search Provider')} htmlFor="web-search-provider">
-              <Select id="web-search-provider" value={provider} onChange={(event) => setProvider(event.target.value as SearchProviderKind)}>
-                {PROVIDERS.map((value) => (
-                  <option key={value} value={value}>
-                    {value === 'BRAVE' ? 'Brave' : 'Tavily'}
+            <Field
+              label={t('settings.webSearchProvider', 'Search Provider')}
+              htmlFor="web-search-provider"
+              hint={
+                keyHint
+                  ? t('settings.webSearchStoredKey', 'Stored key: {{hint}}', { hint: keyHint })
+                  : t('settings.webSearchKeyHint', 'Keys are managed on the Search Providers page and encrypted at rest.')
+              }
+            >
+              <Select id="web-search-provider" value={selectedProviderId} onChange={(event) => void onProviderChange(event.target.value)}>
+                <option value="">{t('settings.webSearchAuto', 'Auto — all active providers')}</option>
+                {providers.map((provider) => (
+                  <option key={provider.id} value={provider.id}>
+                    {provider.name} ({provider.kind})
                   </option>
                 ))}
               </Select>
             </Field>
-            <Field
-              label={t('settings.webSearchApiKey', 'API Key')}
-              htmlFor="web-search-api-key"
-              hint={
-                settings?.keyHint && settings.provider === provider
-                  ? t('settings.webSearchStoredKey', 'Stored key: {{hint}}', { hint: settings.keyHint })
-                  : t('settings.webSearchKeyHint', 'Leave empty to keep the stored key. The key is encrypted and never shown again.')
-              }
-            >
-              <Input
-                id="web-search-api-key"
-                type="password"
-                autoComplete="off"
-                placeholder={t('settings.webSearchApiKeyPlaceholder', 'Paste your API key')}
-                value={apiKey}
-                onChange={(event) => setApiKey(event.target.value)}
-              />
-            </Field>
+            <p className="text-xs text-[var(--color-text-secondary)]">
+              <Link to="/search-providers" className="text-[var(--color-accent-text)] hover:underline">
+                {t('settings.webSearchManageProviders', 'Manage search providers and keys →')}
+              </Link>
+            </p>
           </>
         )}
         <Button type="submit" variant="primary" size="sm" loading={saving} disabled={settings === null}>

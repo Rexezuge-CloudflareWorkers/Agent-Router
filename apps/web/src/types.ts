@@ -10,8 +10,43 @@ export type SearchProviderKind = 'BRAVE' | 'TAVILY';
 
 export interface WebSearchSettings {
   mode: WebSearchMode;
-  provider: SearchProviderKind | null;
+  /**
+  null = auto: fail over across all active search providers.
+  */
+  selectedProviderId: string | null;
+  updatedAt: number | null;
+}
+
+export type SearchProviderStatus = 'active' | 'disabled';
+
+export type SearchProviderKeyStatus = 'active' | 'degraded' | 'exhausted' | 'disabled';
+
+export interface SearchProvider {
+  id: string;
+  userEmail: string;
+  kind: SearchProviderKind;
+  name: string;
+  status: SearchProviderStatus;
+  createdAt: number;
+  updatedAt: number | null;
+}
+
+export interface SearchProviderKey {
+  id: string;
+  providerId: string;
+  userEmail: string;
+  name: string;
   keyHint: string | null;
+  requestLimit: number | null;
+  usedRequests: number;
+  resetAt: number | null;
+  priority: number;
+  status: SearchProviderKeyStatus;
+  cooldownUntil: number | null;
+  consecutiveFailures: number;
+  lastUsedAt: number | null;
+  lastError: string | null;
+  createdAt: number;
   updatedAt: number | null;
 }
 

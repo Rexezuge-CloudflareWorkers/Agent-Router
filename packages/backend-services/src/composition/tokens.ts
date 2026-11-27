@@ -5,6 +5,8 @@ import type {
   GatewayKeyPeakPreferenceDAO,
   ProviderDAO,
   ProviderKeyDAO,
+  SearchProviderDAO,
+  SearchProviderKeyDAO,
   UsageLedgerDAO,
   UserDAO,
   WebSearchSettingsDAO,
@@ -19,6 +21,7 @@ import type { GatewayKeyService } from '../gateway/GatewayKeyService';
 import type { ProviderService } from '../provider/ProviderService';
 import type { ProviderKeyService } from '../provider/ProviderKeyService';
 import type { RouterService } from '../router/RouterService';
+import type { SearchKeyPoolService, SearchProviderKeyService, SearchProviderService } from '../search';
 import type { WebSearchRoutingService, WebSearchSettingsService } from '../search';
 import type { UsageService } from '../usage/UsageService';
 import type { UserService } from '../user/UserService';
@@ -34,6 +37,8 @@ const Tokens = {
   CommandCodeKeyStateDAO: Symbol('CommandCodeKeyStateDAO') as Token<() => Promise<CommandCodeKeyStateDAO>>,
   UsageLedgerDAO: Symbol('UsageLedgerDAO') as Token<() => Promise<UsageLedgerDAO>>,
   WebSearchSettingsDAO: Symbol('WebSearchSettingsDAO') as Token<() => Promise<WebSearchSettingsDAO>>,
+  SearchProviderDAO: Symbol('SearchProviderDAO') as Token<() => Promise<SearchProviderDAO>>,
+  SearchProviderKeyDAO: Symbol('SearchProviderKeyDAO') as Token<() => Promise<SearchProviderKeyDAO>>,
   AccessAuthService: Symbol('AccessAuthService') as Token<AccessAuthService>,
   CodexOAuthService: Symbol('CodexOAuthService') as Token<CodexOAuthService>,
   CodexTokenService: Symbol('CodexTokenService') as Token<CodexTokenService>,
@@ -44,6 +49,9 @@ const Tokens = {
   RouterService: Symbol('RouterService') as Token<RouterService>,
   WebSearchRoutingService: Symbol('WebSearchRoutingService') as Token<WebSearchRoutingService>,
   WebSearchSettingsService: Symbol('WebSearchSettingsService') as Token<WebSearchSettingsService>,
+  SearchProviderService: Symbol('SearchProviderService') as Token<SearchProviderService>,
+  SearchProviderKeyService: Symbol('SearchProviderKeyService') as Token<SearchProviderKeyService>,
+  SearchKeyPoolService: Symbol('SearchKeyPoolService') as Token<SearchKeyPoolService>,
   UsageService: Symbol('UsageService') as Token<UsageService>,
   UserService: Symbol('UserService') as Token<UserService>,
 } satisfies Record<string, Token<unknown>>;

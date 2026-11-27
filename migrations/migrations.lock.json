@@ -32,6 +32,10 @@
     {
       "name": "0008_web_search_settings.sql",
       "sha256": "b26ef196216852c8d5eddb19fa136cc13ef04a79033e4c037ac90aaeec58bd57"
+    },
+    {
+      "name": "0009_search_providers.sql",
+      "sha256": "859b7c0715e8221d18750cde11991340296b05fb99733f5d75e4823f4f65e115"
     }
   ]
 }

@@ -47,6 +47,22 @@ class UsageResetTask extends BaseScheduledTask {
   }
 }
 
+class SearchUsageResetTask extends BaseScheduledTask {
+  public readonly name = 'SearchUsageResetTask';
+  public readonly phase: 1 | 2 = 1;
+
+  public constructor(private readonly scopeFactory: ScopeFactory = defaultScopeFactory) {
+    super();
+  }
+
+  protected async handleScheduledTask(env: Env): Promise<void> {
+    const scope = this.scopeFactory(env);
+    const dao = await scope.get(Tokens.SearchProviderKeyDAO)();
+    const reset = await dao.resetDueKeys(TimestampUtil.getCurrentUnixTimestampInSeconds(), 500).catch(() => 0);
+    if (reset > 0) logger.info(`Reset usage for ${reset} search keys`);
+  }
+}
+
 class KeyHealthTask extends BaseScheduledTask {
   public readonly name = 'KeyHealthTask';
   public readonly phase: 1 | 2 = 2;
@@ -61,6 +77,23 @@ class KeyHealthTask extends BaseScheduledTask {
     const threshold = ConfigurationManager.router.getKeyMaxConsecutiveFailures(env);
     const disabled = await dao.disableFailing(threshold, TimestampUtil.getCurrentUnixTimestampInSeconds(), 200).catch(() => 0);
     if (disabled > 0) logger.info(`Disabled ${disabled} failing provider keys`);
+  }
+}
+
+class SearchKeyHealthTask extends BaseScheduledTask {
+  public readonly name = 'SearchKeyHealthTask';
+  public readonly phase: 1 | 2 = 2;
+
+  public constructor(private readonly scopeFactory: ScopeFactory = defaultScopeFactory) {
+    super();
+  }
+
+  protected async handleScheduledTask(env: Env): Promise<void> {
+    const scope = this.scopeFactory(env);
+    const dao = await scope.get(Tokens.SearchProviderKeyDAO)();
+    const threshold = ConfigurationManager.router.getKeyMaxConsecutiveFailures(env);
+    const disabled = await dao.disableFailing(threshold, TimestampUtil.getCurrentUnixTimestampInSeconds(), 200).catch(() => 0);
+    if (disabled > 0) logger.info(`Disabled ${disabled} failing search keys`);
   }
 }
 
@@ -109,8 +142,10 @@ class CodexTokenRefreshTask extends BaseScheduledTask {
 const CRON_TASK_DEFINITIONS: ScheduledTask[] = [
   new GatewayKeyPruningTask(),
   new UsageResetTask(),
+  new SearchUsageResetTask(),
   new CodexTokenRefreshTask(),
   new KeyHealthTask(),
+  new SearchKeyHealthTask(),
   new UsagePruneTask(),
 ];
 
@@ -130,8 +165,10 @@ export {
   runScheduledTasks,
   GatewayKeyPruningTask,
   UsageResetTask,
+  SearchUsageResetTask,
   CodexTokenRefreshTask,
   KeyHealthTask,
+  SearchKeyHealthTask,
   UsagePruneTask,
 };
 export type { ScheduledTask, ScopeFactory } from './IScheduledTask';
