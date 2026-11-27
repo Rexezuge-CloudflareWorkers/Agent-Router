@@ -46,6 +46,8 @@ describe('WebSearchClient', () => {
     const client = new WebSearchClient();
     const results = normalizeResults({ results: [{ title: 'One', url: 'https://a.test', content: 'text' }] }, 'TAVILY');
     expect(client.formatToolResult(results)).toContain('[1] One');
+    expect(client.formatToolResult(results)).toContain('Every factual claim must include');
+    expect(client.formatToolResult(results, undefined, 4)).toContain('[5] One');
     expect(client.formatToolResult(results, 'timeout')).toContain('Web search failed: timeout');
   });
 });
