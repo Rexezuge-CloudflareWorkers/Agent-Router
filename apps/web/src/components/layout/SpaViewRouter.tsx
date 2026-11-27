@@ -9,6 +9,7 @@ import { LoadingSpinner, EmptyState } from './PageState';
 import { LandingView } from '../../views/LandingView';
 import { DashboardView } from '../../views/DashboardView';
 import { ProvidersView } from '../../views/ProvidersView';
+import { SearchProvidersView } from '../../views/SearchProvidersView';
 import { GatewayKeysView } from '../../views/GatewayKeysView';
 import { SettingsView } from '../../views/SettingsView';
 
@@ -49,6 +50,7 @@ function SpaViewRouter({ user, setUser, authorized, showNotice, language, onLang
     <Routes>
       <Route path="/" element={user ? <DashboardView showNotice={showNotice} /> : <LandingView />} />
       <Route path="/providers" element={gated(user, <ProvidersView showNotice={showNotice} />)} />
+      <Route path="/search-providers" element={gated(user, <SearchProvidersView showNotice={showNotice} />)} />
       <Route path="/keys" element={gated(user, <GatewayKeysView showNotice={showNotice} />)} />
       <Route
         path="/usage"

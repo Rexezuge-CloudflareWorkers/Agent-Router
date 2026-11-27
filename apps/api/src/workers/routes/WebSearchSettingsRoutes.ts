@@ -18,17 +18,13 @@ function registerWebSearchSettingsRoutes(app: UserApp): void {
     const email = c.get('AuthenticatedUserEmailAddress');
     const body = (await c.req.json().catch(() => ({}))) as Partial<WebSearchSettingsInput>;
     if (!body.mode || typeof body.mode !== 'string') return badRequest('mode is required');
-    if (body.provider !== undefined && body.provider !== null && typeof body.provider !== 'string')
-      return badRequest('provider must be a string');
-    if (body.apiKey !== undefined && body.apiKey !== null && typeof body.apiKey !== 'string') return badRequest('apiKey must be a string');
+    if (body.selectedProviderId !== undefined && body.selectedProviderId !== null && typeof body.selectedProviderId !== 'string') {
+      return badRequest('selectedProviderId must be a string');
+    }
     return respond(async () => {
       const settings = await createRequestScope(c.env)
         .get(Tokens.WebSearchSettingsService)
-        .saveSettings(email, {
-          mode: body.mode as WebSearchSettingsInput['mode'],
-          provider: body.provider,
-          apiKey: body.apiKey,
-        });
+        .saveSettings(email, { mode: body.mode as WebSearchSettingsInput['mode'], selectedProviderId: body.selectedProviderId });
       return Response.json(settings);
     });
   });

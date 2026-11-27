@@ -36,9 +36,18 @@ function request(body: Record<string, unknown>): ProxyRequest {
 
 function harness(mode: WebSearchMode, responses: ProxySuccess[], fetchImpl?: typeof fetch) {
   const settings = {
-    getSettings: async () => ({ mode, provider: mode === 'third_party' ? 'BRAVE' : null, keyHint: null, updatedAt: null }),
-    decryptApiKey: async () => ({ provider: 'BRAVE' as const, apiKey: 'brave-key' }),
+    getSettings: async () => ({ mode, selectedProviderId: mode === 'third_party' ? 'sp-brave' : null, updatedAt: null }),
   };
+  const select = vi.fn(async () => [
+    {
+      keyId: 'sk-1',
+      providerId: 'sp-brave',
+      kind: 'BRAVE' as const,
+      apiKey: 'brave-key',
+      row: { id: 'sk-1', consecutive_failures: 0 },
+    },
+  ]);
+  const keyPool = { select, recordSuccess: vi.fn(async () => {}), recordFailure: vi.fn(async () => {}) };
   const proxy = vi.fn(async (_req: ProxyRequest) => responses.shift() ?? success({ choices: [{ message: { content: 'ok' } }] }));
   const router = { proxy };
   const fetchMock = fetchImpl ?? vi.fn(async () => Response.json({ web: { results: [] } }));
@@ -46,9 +55,10 @@ function harness(mode: WebSearchMode, responses: ProxySuccess[], fetchImpl?: typ
   const service = new WebSearchRoutingService({
     settings: settings as never,
     router: router as never,
+    keyPool: keyPool as never,
     searchClient,
   });
-  return { service, proxy, fetchMock };
+  return { service, proxy, fetchMock, keyPool };
 }
 
 function toolCallWith(id: string, query: string): Record<string, unknown> {

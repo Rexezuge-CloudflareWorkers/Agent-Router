@@ -11,6 +11,19 @@ interface WebSearchClientDeps {
   timeoutMs?: number;
 }
 
+/**
+Carries the upstream status so the key pool can classify a failure.
+*/
+class SearchProviderError extends Error {
+  public constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'SearchProviderError';
+  }
+}
+
 function truncate(value: string, length: number): string {
   return value.length > length ? value.slice(0, length) : value;
 }
@@ -74,7 +87,7 @@ class WebSearchClient {
               }),
               signal: controller.signal,
             });
-      if (!response.ok) throw new Error(`Search provider returned ${response.status}`);
+      if (!response.ok) throw new SearchProviderError(response.status, `Search provider returned ${response.status}`);
       const payload: unknown = await response.json();
       return normalizeResults(payload, kind);
     } finally {
@@ -102,4 +115,4 @@ class WebSearchClient {
   }
 }
 
-export { BRAVE_URL, DEFAULT_TIMEOUT_MS, TAVILY_URL, WebSearchClient, normalizeResults };
+export { BRAVE_URL, DEFAULT_TIMEOUT_MS, TAVILY_URL, SearchProviderError, WebSearchClient, normalizeResults };

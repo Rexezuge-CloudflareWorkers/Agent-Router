@@ -8,6 +8,7 @@ import { SPA_HTML } from '@/generated/spa-shell';
 import { registerGatewayKeyRoutes } from './routes/GatewayKeyRoutes';
 import { registerProviderRoutes } from './routes/ProviderRoutes';
 import { registerProxyRoutes } from './routes/ProxyRoutes';
+import { registerSearchProviderRoutes } from './routes/SearchProviderRoutes';
 import { registerUsageRoutes } from './routes/UsageRoutes';
 import { registerUserRoutes } from './routes/UserRoutes';
 import { registerWebSearchSettingsRoutes } from './routes/WebSearchSettingsRoutes';
@@ -53,11 +54,13 @@ class AgentRouterWorker extends AbstractEntrypointWorker {
     app.use('/docs/*', MiddlewareHandlers.userAuthentication());
     app.use('/user/gateway-keys*', rateLimit({ windowMs: 60_000, max: 30, keyPrefix: 'gateway-keys' }));
     app.use('/user/providers*', rateLimit({ windowMs: 60_000, max: 60, keyPrefix: 'providers' }));
+    app.use('/user/search-providers*', rateLimit({ windowMs: 60_000, max: 60, keyPrefix: 'search-providers' }));
     app.use('/user/settings/web-search', rateLimit({ windowMs: 60_000, max: 30, keyPrefix: 'web-search-settings' }));
 
     registerUserRoutes(app);
     registerGatewayKeyRoutes(app);
     registerProviderRoutes(app);
+    registerSearchProviderRoutes(app);
     registerUsageRoutes(app);
     registerWebSearchSettingsRoutes(app);
 
@@ -69,6 +72,7 @@ class AgentRouterWorker extends AbstractEntrypointWorker {
       return path === '/' ||
         path === '/settings' ||
         path === '/providers' ||
+        path === '/search-providers' ||
         path === '/keys' ||
         path === '/usage' ||
         path.startsWith('/user/')

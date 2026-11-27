@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { BarChart3, KeyRound, LayoutDashboard, Menu, Route, Server, Settings, X } from 'lucide-react';
+import { BarChart3, Globe2, KeyRound, LayoutDashboard, Menu, Route, Server, Settings, X } from 'lucide-react';
 import type { CurrentUser } from '../../types';
 import { cn } from '../../lib/utils';
 import { ZERO_TRUST_AUTHENTICATION_PATH } from '../../lib/constants';
@@ -9,6 +9,7 @@ import { ZERO_TRUST_AUTHENTICATION_PATH } from '../../lib/constants';
 const NAV_ITEMS = [
   { key: 'dashboard', path: '/', icon: LayoutDashboard, end: true },
   { key: 'providers', path: '/providers', icon: Server },
+  { key: 'searchProviders', path: '/search-providers', icon: Globe2 },
   { key: 'keys', path: '/keys', icon: KeyRound },
   { key: 'usage', path: '/usage', icon: BarChart3 },
   { key: 'settings', path: '/settings', icon: Settings },
