@@ -12,6 +12,10 @@ pool, managed through the same CRUD surface as model provider keys.
 */
 class WebSearchSettingsService {
   private readonly deps: Required<WebSearchSettingsDeps>;
+  /**
+  One service instance lives for one request; cache its settings reads.
+  */
+  private readonly cache = new Map<string, Promise<WebSearchSettings>>();
 
   constructor(
     private readonly env: WebSearchSettingsEnv,
@@ -25,7 +29,17 @@ class WebSearchSettingsService {
   }
 
   public async getSettings(userEmail: string): Promise<WebSearchSettings> {
-    const row = await (await this.deps.dao()).getByEmail(userEmail.toLowerCase());
+    const key = userEmail.toLowerCase();
+    let cached = this.cache.get(key);
+    if (!cached) {
+      cached = this.loadSettings(key);
+      this.cache.set(key, cached);
+    }
+    return cached;
+  }
+
+  private async loadSettings(userEmail: string): Promise<WebSearchSettings> {
+    const row = await (await this.deps.dao()).getByEmail(userEmail);
     if (!row) return { mode: 'none', selectedProviderId: null, updatedAt: null };
     return {
       mode: isWebSearchMode(row.mode) ? row.mode : 'none',
@@ -47,6 +61,7 @@ class WebSearchSettingsService {
     }
     const now = this.deps.now();
     await (await this.deps.dao()).upsert(normalized, input.mode, selectedProviderId, now);
+    this.cache.delete(normalized);
     return { mode: input.mode, selectedProviderId, updatedAt: now };
   }
 }

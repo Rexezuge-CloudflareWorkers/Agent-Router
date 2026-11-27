@@ -122,6 +122,7 @@ describe('WebSearchRoutingService', () => {
     const second = proxy.mock.calls[1][0] as unknown as ProxyRequest;
     expect(first.clientStream).toBe(false);
     expect((first.upstreamBody as { tools: unknown[] }).tools).toHaveLength(1);
+    expect(first.upstreamBody).toMatchObject({ tool_choice: { type: 'function', function: { name: 'web_search' } } });
     expect(second.rawBodyText).not.toBe(first.rawBodyText);
     expect(second.rawBodyText).toContain('tool_call_id');
     expect(fetchImpl).toHaveBeenCalledTimes(1);
@@ -186,11 +187,15 @@ describe('WebSearchRoutingService', () => {
       [success(toolCall), success(toolCall), success(toolCall), success({ choices: [{ message: { content: 'Final [1]' } }] })],
       fetchImpl,
     );
-    const result = await service.proxy(request({ model: 'gpt-5', messages: [{ role: 'user', content: 'hi' }] }), 'chat');
+    const result = await service.proxy(
+      request({ model: 'gpt-5', messages: [{ role: 'user', content: 'hi' }], tool_choice: 'auto' }),
+      'chat',
+    );
 
     expect(proxy).toHaveBeenCalledTimes(4);
     const last = proxy.mock.calls[3][0] as unknown as ProxyRequest;
     expect((last.upstreamBody as { tools: unknown[] }).tools).toHaveLength(0);
+    expect(last.upstreamBody).toMatchObject({ tool_choice: 'auto' });
     expect(last.rawBodyText).toContain('Stop searching');
     expect(result.bodyText).toContain('Final [1]');
   });
@@ -269,5 +274,36 @@ describe('WebSearchRoutingService', () => {
     expect(input).toMatchObject([{ type: 'message' }, { type: 'function_call_output', call_id: 'call_1' }]);
     expect(result.contentType).toBe('text/event-stream');
     expect(result.bodyText).toContain('response.completed');
+  });
+
+  it('replays the second Responses tool call when a stored response is used', async () => {
+    const calls = [
+      { output: [{ type: 'function_call', id: 'fc_1', call_id: 'call_1', name: 'web_search', arguments: '{"query":"one"}' }] },
+      { output: [{ type: 'function_call', id: 'fc_2', call_id: 'call_2', name: 'web_search', arguments: '{"query":"two"}' }] },
+      { output_text: 'Answer [1] [2]', output: [] },
+    ];
+    const { service, proxy } = harness(
+      'third_party',
+      calls.map((body) => success(body)),
+    );
+    const body = {
+      model: 'gpt-5',
+      input: 'hi',
+      previous_response_id: 'resp_0',
+      stream: false,
+    };
+    await service.proxy({ ...request(body), upstreamPath: '/responses' }, 'responses');
+
+    expect(proxy).toHaveBeenCalledTimes(3);
+    const firstFollowUp = proxy.mock.calls[1][0] as unknown as ProxyRequest;
+    const secondFollowUp = proxy.mock.calls[2][0] as unknown as ProxyRequest;
+    const firstInput = (JSON.parse(firstFollowUp.rawBodyText ?? '{}') as { input: Array<{ type?: string }> }).input;
+    expect(firstInput.some((item) => item.type === 'function_call')).toBe(false);
+    expect(JSON.parse(secondFollowUp.rawBodyText ?? '{}')).toMatchObject({
+      input: expect.arrayContaining([
+        expect.objectContaining({ type: 'function_call', id: 'fc_2', call_id: 'call_2' }),
+        expect.objectContaining({ type: 'function_call_output', call_id: 'call_2' }),
+      ]),
+    });
   });
 });

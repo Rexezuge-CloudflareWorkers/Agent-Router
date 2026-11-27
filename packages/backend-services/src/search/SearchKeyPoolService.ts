@@ -62,13 +62,15 @@ class SearchKeyPoolService {
         await dao.markExhausted(row.id, now).catch(() => {});
         continue;
       }
-      candidates.push({
-        keyId: row.id,
-        providerId: row.provider_id,
-        kind: row.provider_kind,
-        apiKey: await this.deps.keyService().decryptSecret(row.id, userEmail),
-        row,
-      });
+      let apiKey: string;
+      try {
+        apiKey = await this.deps.keyService().decryptSecret(row.id, userEmail);
+      } catch {
+        // One undecryptable credential must not disable the whole pool; other
+        // providers may still be healthy.
+        continue;
+      }
+      candidates.push({ keyId: row.id, providerId: row.provider_id, kind: row.provider_kind, apiKey, row });
       if (candidates.length >= this.deps.config.getProxyMaxAttempts()) break;
     }
     return candidates;

@@ -45,6 +45,28 @@ describe('WebSearchSettingsDAO', () => {
 });
 
 describe('WebSearchSettingsService', () => {
+  it('reads settings once per request instance and invalidates the cache on save', async () => {
+    let reads = 0;
+    const dao = {
+      getByEmail: async () => {
+        reads += 1;
+        return null;
+      },
+      upsert: async () => {},
+    } as unknown as Dao;
+    const providerDAO = { getById: async () => null } as unknown as SearchProviderDAO;
+    const svc = new WebSearchSettingsService(
+      { DB: {} as never },
+      { dao: () => Promise.resolve(dao), searchProviderDAO: () => Promise.resolve(providerDAO), now: () => 1 },
+    );
+    await svc.getSettings('U@X.Y');
+    await svc.getSettings('u@x.y');
+    expect(reads).toBe(1);
+    await svc.saveSettings('u@x.y', { mode: 'native' });
+    await svc.getSettings('u@x.y');
+    expect(reads).toBe(2);
+  });
+
   it('defaults to none and selects all providers automatically', async () => {
     expect(await service().getSettings('u@x.y')).toEqual({ mode: 'none', selectedProviderId: null, updatedAt: null });
   });

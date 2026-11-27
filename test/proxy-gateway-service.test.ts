@@ -130,6 +130,41 @@ describe('proxy operations', () => {
     expect(input.rawBodyText).toBe(body);
   });
 
+  it('sends embeddings straight to the router without a web_search tool', async () => {
+    const proxy = vi.fn(async (_input: unknown) => ({
+      status: 200,
+      bodyText: '{"object":"list","data":[]}',
+      contentType: 'application/json',
+      providerKeyId: 'pk-1',
+    }));
+    const response = await handleOpenAiProxy(
+      {} as never,
+      request('{"model":"text-embedding-3-small","input":"hi"}'),
+      '/embeddings',
+      identity,
+      () => scopeWith(proxy),
+    );
+    expect(response.status).toBe(200);
+    const input = proxy.mock.calls[0][0] as unknown as Record<string, unknown>;
+    expect(input.upstreamPath).toBe('/embeddings');
+    expect(input.upstreamBody).not.toHaveProperty('tools');
+    expect(input.upstreamBody).not.toHaveProperty('tool_choice');
+  });
+
+  it('labels streaming Gemini responses as SSE', async () => {
+    const gemini = { id: 'p1', kind: 'GEMINI', status: 'active', baseUrl: null, name: 'p1' };
+    const proxy = vi.fn(async (_input: unknown) => ({
+      status: 200,
+      bodyText: 'data: {}\n\n',
+      contentType: 'text/event-stream',
+      providerKeyId: 'pk-1',
+    }));
+    const response = await handleGeminiProxy({} as never, request('{"contents":[]}'), 'gemini-2.5-flash:generateContent', identity, () =>
+      scopeWith(proxy, { provider: gemini }),
+    );
+    expect(response.headers.get('content-type')).toBe('text/event-stream');
+  });
+
   it('normalizes bare and prefixed Gemini actions into one upstream path', async () => {
     const gemini = { id: 'p1', kind: 'GEMINI', status: 'active', baseUrl: null, name: 'p1' };
     for (const action of ['gemini-2.5-flash:generateContent', 'models/gemini-2.5-flash:generateContent']) {
