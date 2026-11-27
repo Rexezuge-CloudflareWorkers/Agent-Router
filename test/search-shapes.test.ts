@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  appendAnswerDirective,
   appendToolResult,
+  appendToolResults,
   bufferedBody,
   bufferedUpstreamPath,
   findSearchToolCall,
+  findSearchToolCalls,
   injectSearchTool,
+  removeSearchTool,
   stripNativeSearch,
 } from '@agent-router/backend-services/search/requestShapes';
 import { injectCitations, toSse } from '@agent-router/backend-services/search/responseShapes';
@@ -76,7 +80,7 @@ describe('web search request shapes', () => {
         { candidates: [{ content: { parts: [{ functionCall: { name: 'web_search', args: { query: 'four' } } }] } }] },
         'gemini',
       ),
-    ).toEqual({ id: 'call_web_search', query: 'four' });
+    ).toEqual({ id: 'call_web_search_0', query: 'four' });
     expect(findSearchToolCall({ choices: [{ message: { content: 'done' } }] }, 'chat')).toBeNull();
   });
 
@@ -99,6 +103,54 @@ describe('web search request shapes', () => {
     const gemini: Record<string, unknown> = { contents: [{ role: 'user', parts: [{ text: 'hi' }] }] };
     appendToolResult(gemini, 'gemini', { id: 'g1', query: 'q' }, 'found');
     expect((gemini.contents as Array<Record<string, unknown>>)[2].parts).toMatchObject([{ functionResponse: { name: 'web_search' } }]);
+  });
+
+  it('collects every web search call and appends several results', () => {
+    const payload = {
+      choices: [
+        {
+          message: {
+            tool_calls: ['a', 'b', 'a'].map((id, index) => ({
+              id,
+              function: { name: 'web_search', arguments: JSON.stringify({ query: index === 2 ? 'q0' : `q${index}` }) },
+            })),
+          },
+        },
+      ],
+    };
+    expect(findSearchToolCalls(payload, 'chat').map((call) => call.query)).toEqual(['q0', 'q1']);
+    const body: Record<string, unknown> = { messages: [] };
+    appendToolResults(body, 'chat', findSearchToolCalls(payload, 'chat'), ['first', 'second']);
+    const messages = body.messages as Array<Record<string, unknown>>;
+    expect(messages).toHaveLength(4);
+    expect(messages[1]).toMatchObject({ role: 'tool', content: 'first' });
+    expect(messages[3]).toMatchObject({ role: 'tool', content: 'second' });
+  });
+
+  it('removes only the injected tool and appends a final answer directive', () => {
+    const body: Record<string, unknown> = {
+      messages: [],
+      tools: [
+        { type: 'function', function: { name: 'other' } },
+        { type: 'function', function: { name: 'web_search' } },
+      ],
+    };
+    removeSearchTool(body, 'chat');
+    expect(body.tools).toEqual([{ type: 'function', function: { name: 'other' } }]);
+    appendAnswerDirective(body, 'chat');
+    expect((body.messages as Array<Record<string, unknown>>)[0]).toMatchObject({
+      role: 'user',
+      content: expect.stringContaining('Stop searching'),
+    });
+
+    const gemini: Record<string, unknown> = {
+      contents: [],
+      tools: [{ functionDeclarations: [{ name: 'web_search' }, { name: 'other' }] }],
+    };
+    removeSearchTool(gemini, 'gemini');
+    expect(gemini.tools).toMatchObject([{ functionDeclarations: [{ name: 'other' }] }]);
+    appendAnswerDirective(gemini, 'gemini');
+    expect(gemini.contents).toHaveLength(1);
   });
 
   it('forces buffered calls for the two-phase flow', () => {
@@ -126,6 +178,31 @@ describe('web search response shapes', () => {
     expect(gemini.candidates).toMatchObject([
       { groundingMetadata: { groundingChunks: [{ web: { uri: 'https://source.test', title: 'Source' } }] } },
     ]);
+  });
+
+  it('anchors citations precisely instead of highlighting the whole answer', () => {
+    const marked = 'See [1] for details';
+    const markedBody = injectCitations({ choices: [{ message: { content: marked } }] }, results, 'chat');
+    const markedCitation = (
+      markedBody.choices as Array<{ message: { annotations: Array<{ url_citation: { start_index: number; end_index: number } }> } }>
+    )[0].message.annotations[0].url_citation;
+    expect(markedCitation.start_index).toBe(marked.indexOf('[1]'));
+    expect(markedCitation.end_index).toBe(marked.indexOf('[1]') + 3);
+
+    const domained = 'Visit source.test for details';
+    const domainedBody = injectCitations({ choices: [{ message: { content: domained } }] }, results, 'chat');
+    const domainedCitation = (
+      domainedBody.choices as Array<{ message: { annotations: Array<{ url_citation: { start_index: number; end_index: number } }> } }>
+    )[0].message.annotations[0].url_citation;
+    expect(domainedCitation.start_index).toBe(domained.indexOf('source.test'));
+
+    const unmatched = 'Nothing here';
+    const unmatchedBody = injectCitations({ choices: [{ message: { content: unmatched } }] }, results, 'chat');
+    const unmatchedCitation = (
+      unmatchedBody.choices as Array<{ message: { annotations: Array<{ url_citation: { start_index: number; end_index: number } }> } }>
+    )[0].message.annotations[0].url_citation;
+    expect(unmatchedCitation.start_index).toBe(unmatched.length);
+    expect(unmatchedCitation.end_index).toBe(unmatched.length);
   });
 
   it('renders native SSE frames with final citations', () => {

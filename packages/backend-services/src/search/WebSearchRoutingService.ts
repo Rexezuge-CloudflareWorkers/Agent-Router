@@ -4,14 +4,17 @@ import type { ProxyRequest, ProxySuccess, RouterService } from '../router';
 import { WebSearchClient } from './WebSearchClient';
 import { WebSearchSettingsService } from './WebSearchSettingsService';
 import {
-  appendToolResult,
+  appendAnswerDirective,
+  appendToolResults,
   bufferedBody,
   bufferedUpstreamPath,
-  findSearchToolCall,
+  findSearchToolCalls,
   injectSearchTool,
+  removeSearchTool,
   stripNativeSearch,
 } from './requestShapes';
 import { injectCitations, toSse } from './responseShapes';
+import { MAX_TOOL_ROUNDS } from './types';
 import type { SearchEndpoint, SearchResult } from './types';
 
 interface WebSearchRoutingDeps {
@@ -51,33 +54,59 @@ class WebSearchRoutingService {
       return this.router.proxy(request);
     }
 
-    // Third-party mode: force buffered upstream calls so the tool call can be
-    // detected, then render the client's native shape at the end.
+    // Third-party mode: force buffered upstream calls so tool calls can be
+    // detected deterministically, then render the client's native shape once
+    // the model stops searching.
     stripNativeSearch(body, endpoint);
     injectSearchTool(body, endpoint);
-    const first = await this.router.proxy(
-      this.withBody(request, bufferedBody(body, endpoint), bufferedUpstreamPath(endpoint, request.upstreamPath), false),
-    );
-    const payload = this.parse(first);
-    if (!payload) return this.deliver(first, endpoint, request.clientStream === true, []);
-    const call = findSearchToolCall(payload, endpoint);
-    if (!call) return this.deliver(first, endpoint, request.clientStream === true, []);
+    let response = await this.callUpstream(request, body, endpoint);
+    let rounds = 1;
+    const results: SearchResult[] = [];
+    let credential: { provider: 'BRAVE' | 'TAVILY'; apiKey: string } | undefined;
 
-    let results: SearchResult[] = [];
-    let searchError: string | undefined;
-    try {
-      const credential = await this.settings.decryptApiKey(request.userEmail);
-      results = await this.searchClient.search(credential.provider, call.query, credential.apiKey, request.signal);
-    } catch (error) {
-      // A failed search degrades to a tool result the model can explain,
-      // instead of turning an otherwise valid completion into a hard error.
-      searchError = error instanceof Error ? error.message.slice(0, 200) : 'Unknown search error';
+    while (rounds < MAX_TOOL_ROUNDS) {
+      const payload = this.parse(response);
+      if (!payload) break;
+      const calls = findSearchToolCalls(payload, endpoint);
+      if (calls.length === 0) break;
+
+      const contents: string[] = [];
+      for (const call of calls) {
+        try {
+          credential ??= await this.settings.decryptApiKey(request.userEmail);
+          const found = await this.searchClient.search(credential.provider, call.query, credential.apiKey, request.signal);
+          const startIndex = results.length;
+          results.push(...found);
+          contents.push(this.searchClient.formatToolResult(found, undefined, startIndex));
+        } catch (error) {
+          // A failed search degrades to a tool result the model can explain,
+          // instead of turning an otherwise valid completion into a hard error.
+          const message = error instanceof Error ? error.message.slice(0, 200) : 'Unknown search error';
+          contents.push(this.searchClient.formatToolResult([], message));
+        }
+      }
+      appendToolResults(body, endpoint, calls, contents);
+      response = await this.callUpstream(request, body, endpoint);
+      rounds += 1;
     }
-    appendToolResult(body, endpoint, call, this.searchClient.formatToolResult(results, searchError));
-    const second = await this.router.proxy(
+
+    // If the model still wants to search after the cap, remove our tool and
+    // ask it to answer from the collected results. Without this the client
+    // would receive a tool call instead of an answer.
+    const tail = this.parse(response);
+    if (tail && findSearchToolCalls(tail, endpoint).length > 0) {
+      removeSearchTool(body, endpoint);
+      appendAnswerDirective(body, endpoint);
+      response = await this.callUpstream(request, body, endpoint);
+    }
+
+    return this.deliver(response, endpoint, request.clientStream === true, results);
+  }
+
+  private callUpstream(request: ProxyRequest, body: Record<string, unknown>, endpoint: SearchEndpoint): Promise<ProxySuccess> {
+    return this.router.proxy(
       this.withBody(request, bufferedBody(body, endpoint), bufferedUpstreamPath(endpoint, request.upstreamPath), false),
     );
-    return this.deliver(second, endpoint, request.clientStream === true, results);
   }
 
   private parse(result: ProxySuccess): unknown {

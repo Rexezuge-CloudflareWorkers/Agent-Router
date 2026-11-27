@@ -50,6 +50,10 @@ const WEB_SEARCH_MODES: ReadonlySet<string> = new Set(['none', 'native', 'third_
 const SEARCH_PROVIDER_KINDS: ReadonlySet<string> = new Set(['BRAVE', 'TAVILY']);
 const WEB_SEARCH_TOOL_NAME = 'web_search';
 const MAX_SEARCH_RESULTS = 5;
+/**
+Upstream calls allowed in the tool loop (initial call + two searches).
+*/
+const MAX_TOOL_ROUNDS = 3;
 
 function isWebSearchMode(value: unknown): value is WebSearchMode {
   return typeof value === 'string' && WEB_SEARCH_MODES.has(value);
@@ -59,7 +63,15 @@ function isSearchProviderKind(value: unknown): value is SearchProviderKind {
   return typeof value === 'string' && SEARCH_PROVIDER_KINDS.has(value);
 }
 
-export { MAX_SEARCH_RESULTS, SEARCH_PROVIDER_KINDS, WEB_SEARCH_MODES, WEB_SEARCH_TOOL_NAME, isSearchProviderKind, isWebSearchMode };
+export {
+  MAX_SEARCH_RESULTS,
+  MAX_TOOL_ROUNDS,
+  SEARCH_PROVIDER_KINDS,
+  WEB_SEARCH_MODES,
+  WEB_SEARCH_TOOL_NAME,
+  isSearchProviderKind,
+  isWebSearchMode,
+};
 export type {
   SearchEndpoint,
   SearchProviderKind,

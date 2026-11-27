@@ -20,18 +20,48 @@ function records(value: unknown): Array<Record<string, unknown>> {
   return asArray(value).map(asRecord);
 }
 
+/**
+Locates text a citation can honestly point at. Falls back from an explicit
+`[n]` marker to the source's domain or title, then to no span at all — a
+zero-width anchor avoids highlighting the whole answer for every source.
+*/
+function citationSpan(result: SearchResult, position: number, text: string, lowerText: string): { start: number; end: number } | null {
+  const label = `[${position + 1}]`;
+  const labelled = text.indexOf(label);
+  if (labelled !== -1) return { start: labelled, end: labelled + label.length };
+
+  const domain = domainOf(result.url);
+  if (domain.length >= 4) {
+    const found = lowerText.indexOf(domain);
+    if (found !== -1) return { start: found, end: found + domain.length };
+  }
+  const titleNeedle = result.title.toLowerCase().trim().slice(0, 16);
+  if (titleNeedle.length >= 4) {
+    const found = lowerText.indexOf(titleNeedle);
+    if (found !== -1) return { start: found, end: found + titleNeedle.length };
+  }
+  return null;
+}
+
+function domainOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '').toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
 function citationsFor(results: SearchResult[], text: string): Citation[] {
+  const lowerText = text.toLowerCase();
   return results.map((result, position) => {
-    const label = `[${position + 1}]`;
-    const found = text.indexOf(label);
-    const startIndex = found === -1 ? 0 : found;
+    const span = citationSpan(result, position, text, lowerText);
     return {
       index: position + 1,
       url: result.url,
       title: result.title,
-      label,
-      startIndex,
-      endIndex: found === -1 ? text.length : found + label.length,
+      label: `[${position + 1}]`,
+      startIndex: span?.start ?? text.length,
+      endIndex: span?.end ?? text.length,
     };
   });
 }

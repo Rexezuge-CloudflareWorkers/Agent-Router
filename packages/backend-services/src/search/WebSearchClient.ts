@@ -84,16 +84,21 @@ class WebSearchClient {
   }
 
   /**
-  Text handed to the model as the `web_search` tool result.
+  Text handed to the model as the `web_search` tool result. `startIndex`
+  keeps numbering stable when several search rounds feed one final answer.
   */
-  public formatToolResult(results: SearchResult[], error?: string): string {
+  public formatToolResult(results: SearchResult[], error?: string, startIndex = 0): string {
     if (error) return `Web search failed: ${error}. Answer with your existing knowledge and say that search was unavailable.`;
     if (results.length === 0) return 'Web search returned no results. Answer with your existing knowledge.';
     const lines = results.map((result, index) => {
-      const reference = `[${index + 1}]`;
+      const reference = `[${startIndex + index + 1}]`;
       return `${reference} ${result.title}\nURL: ${result.url}\n${result.snippet}`.trim();
     });
-    return `Web search results:\n${lines.join('\n\n')}\n\nCite sources with their bracketed number, e.g. [1].`;
+    return (
+      `Web search results:\n${lines.join('\n\n')}\n\n` +
+      `Every factual claim must include at least one bracketed citation, e.g. [${startIndex + 1}]. ` +
+      'Use only the numbers above.'
+    );
   }
 }
 

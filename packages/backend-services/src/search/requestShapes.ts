@@ -5,6 +5,8 @@ import type { SearchEndpoint, SearchToolCall } from './types';
 type JsonBody = Record<string, unknown>;
 
 const TOOL_DESCRIPTION = 'Search the web for current information. Pass a short search query.';
+const ANSWER_DIRECTIVE =
+  'Stop searching. Answer the question now using only the web search results above. Cite each source you use with its bracketed [n] number.';
 
 function records(value: unknown): Array<Record<string, unknown>> {
   return asArray(value).map(asRecord);
@@ -39,16 +41,16 @@ function stripNativeSearch(body: JsonBody, endpoint: SearchEndpoint): boolean {
   return changed;
 }
 
-function hasToolNamed(body: JsonBody, endpoint: SearchEndpoint): boolean {
+function isGenericSearchTool(tool: Record<string, unknown>, endpoint: SearchEndpoint): boolean {
   if (endpoint === 'gemini') {
-    return records(body.tools).some((tool) =>
-      records(tool.functionDeclarations).some((declaration) => asString(declaration.name) === WEB_SEARCH_TOOL_NAME),
-    );
+    return records(tool.functionDeclarations).some((declaration) => asString(declaration.name) === WEB_SEARCH_TOOL_NAME);
   }
-  return records(body.tools).some((tool) => {
-    if (endpoint === 'responses' || endpoint === 'anthropic') return asString(tool.name) === WEB_SEARCH_TOOL_NAME;
-    return asString(asRecord(tool.function).name) === WEB_SEARCH_TOOL_NAME;
-  });
+  if (endpoint === 'responses' || endpoint === 'anthropic') return asString(tool.name) === WEB_SEARCH_TOOL_NAME;
+  return asString(asRecord(tool.function).name) === WEB_SEARCH_TOOL_NAME;
+}
+
+function hasToolNamed(body: JsonBody, endpoint: SearchEndpoint): boolean {
+  return records(body.tools).some((tool) => isGenericSearchTool(tool, endpoint));
 }
 
 /**
@@ -94,6 +96,25 @@ function injectSearchTool(body: JsonBody, endpoint: SearchEndpoint): void {
   body.tools = tools;
 }
 
+/**
+Drops only our injected tool, preserving any tools the client supplied.
+*/
+function removeSearchTool(body: JsonBody, endpoint: SearchEndpoint): void {
+  if (!Array.isArray(body.tools)) return;
+  if (endpoint === 'gemini') {
+    body.tools = records(body.tools)
+      .map((tool) => ({
+        ...tool,
+        functionDeclarations: records(tool.functionDeclarations).filter(
+          (declaration) => asString(declaration.name) !== WEB_SEARCH_TOOL_NAME,
+        ),
+      }))
+      .filter((tool) => records(tool.functionDeclarations).length > 0 || Object.keys(tool).some((key) => key !== 'functionDeclarations'));
+    return;
+  }
+  body.tools = records(body.tools).filter((tool) => !isGenericSearchTool(tool, endpoint));
+}
+
 function queryFromArguments(value: unknown): string {
   const args = typeof value === 'string' ? JSON.parse(value) : value;
   const record = asRecord(args);
@@ -101,49 +122,73 @@ function queryFromArguments(value: unknown): string {
 }
 
 /**
-Finds the model's `web_search` call in a buffered upstream response.
+Finds every `web_search` call in a buffered upstream response. Dedupe by id
+so a malformed response cannot make the same search run twice.
 */
-function findSearchToolCall(payload: unknown, endpoint: SearchEndpoint): SearchToolCall | null {
+function findSearchToolCalls(payload: unknown, endpoint: SearchEndpoint): SearchToolCall[] {
   const response = asRecord(payload);
+  const found: SearchToolCall[] = [];
+  const seen = new Set<string>();
+  const push = (id: string, query: string): void => {
+    const key = `${id}:${query}`;
+    if (!query || seen.has(key)) return;
+    seen.add(key);
+    found.push({ id: id || `call_${WEB_SEARCH_TOOL_NAME}_${found.length}`, query });
+  };
+
   if (endpoint === 'chat') {
     const message = asRecord(asRecord(asArray(response.choices)[0]).message);
     for (const call of records(message.tool_calls)) {
       const fn = asRecord(call.function);
       if (asString(fn.name) !== WEB_SEARCH_TOOL_NAME) continue;
-      const query = queryFromArguments(fn.arguments);
-      if (query) return { id: asString(call.id) || `call_${WEB_SEARCH_TOOL_NAME}`, query };
+      push(asString(call.id) || `call_${WEB_SEARCH_TOOL_NAME}_${found.length}`, queryFromArguments(fn.arguments));
     }
-    return null;
+    return found;
   }
   if (endpoint === 'responses') {
     for (const item of records(response.output)) {
       if (asString(item.type) !== 'function_call' || asString(item.name) !== WEB_SEARCH_TOOL_NAME) continue;
-      const query = queryFromArguments(item.arguments);
-      if (query) return { id: asString(item.call_id) || asString(item.id) || `call_${WEB_SEARCH_TOOL_NAME}`, query };
+      push(asString(item.call_id) || asString(item.id), queryFromArguments(item.arguments));
     }
-    return null;
+    return found;
   }
   if (endpoint === 'anthropic') {
     for (const item of records(response.content)) {
       if (asString(item.type) !== 'tool_use' || asString(item.name) !== WEB_SEARCH_TOOL_NAME) continue;
-      const query = queryFromArguments(item.input);
-      if (query) return { id: asString(item.id) || `call_${WEB_SEARCH_TOOL_NAME}`, query };
+      push(asString(item.id), queryFromArguments(item.input));
     }
-    return null;
+    return found;
   }
   const candidate = asRecord(asArray(response.candidates)[0]);
-  const parts = asArray(asRecord(candidate.content).parts).map(asRecord);
-  for (const part of parts) {
+  for (const [index, part] of asArray(asRecord(candidate.content).parts).map(asRecord).entries()) {
     const call = asRecord(part.functionCall);
     if (asString(call.name) !== WEB_SEARCH_TOOL_NAME) continue;
-    const query = queryFromArguments(call.args);
-    if (query) return { id: `call_${WEB_SEARCH_TOOL_NAME}`, query };
+    push(`call_${WEB_SEARCH_TOOL_NAME}_${index}`, queryFromArguments(call.args));
   }
-  return null;
+  return found;
+}
+
+function findSearchToolCall(payload: unknown, endpoint: SearchEndpoint): SearchToolCall | null {
+  return findSearchToolCalls(payload, endpoint)[0] ?? null;
+}
+
+function inputArray(body: JsonBody): unknown[] {
+  if (Array.isArray(body.input)) return body.input;
+  if (typeof body.input === 'string') {
+    return [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: body.input }] }];
+  }
+  return [];
 }
 
 /**
-Appends the assistant tool call and the search result in the client's shape.
+Appends the assistant tool calls and their search results in the client's shape.
+*/
+function appendToolResults(body: JsonBody, endpoint: SearchEndpoint, calls: SearchToolCall[], contents: string[]): void {
+  calls.forEach((call, index) => appendToolResult(body, endpoint, call, contents[index] ?? ''));
+}
+
+/**
+Appends one assistant tool call and its search result in the client's shape.
 */
 function appendToolResult(body: JsonBody, endpoint: SearchEndpoint, call: SearchToolCall, content: string): void {
   if (endpoint === 'chat') {
@@ -162,10 +207,7 @@ function appendToolResult(body: JsonBody, endpoint: SearchEndpoint, call: Search
     return;
   }
   if (endpoint === 'responses') {
-    let input = asArray(body.input);
-    if (typeof body.input === 'string') {
-      input = [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: body.input }] }];
-    }
+    const input = inputArray(body);
     input.push(
       {
         type: 'function_call',
@@ -206,6 +248,27 @@ function appendToolResult(body: JsonBody, endpoint: SearchEndpoint, call: Search
 }
 
 /**
+Tells the model to stop searching and answer from the results already collected.
+*/
+function appendAnswerDirective(body: JsonBody, endpoint: SearchEndpoint): void {
+  if (endpoint === 'chat' || endpoint === 'anthropic') {
+    const messages = records(body.messages);
+    messages.push({ role: 'user', content: ANSWER_DIRECTIVE });
+    body.messages = messages;
+    return;
+  }
+  if (endpoint === 'responses') {
+    const input = inputArray(body);
+    input.push({ type: 'message', role: 'user', content: [{ type: 'input_text', text: ANSWER_DIRECTIVE }] });
+    body.input = input;
+    return;
+  }
+  const contents = records(body.contents);
+  contents.push({ role: 'user', parts: [{ text: ANSWER_DIRECTIVE }] });
+  body.contents = contents;
+}
+
+/**
 Streaming Gemini traffic must use the buffered upstream path here.
 */
 function bufferedUpstreamPath(endpoint: SearchEndpoint, upstreamPath: string): string {
@@ -221,4 +284,17 @@ function bufferedBody(body: JsonBody, endpoint: SearchEndpoint): JsonBody {
   return copy;
 }
 
-export { appendToolResult, bufferedBody, bufferedUpstreamPath, findSearchToolCall, injectSearchTool, stripNativeSearch, TOOL_DESCRIPTION };
+export {
+  ANSWER_DIRECTIVE,
+  appendAnswerDirective,
+  appendToolResult,
+  appendToolResults,
+  bufferedBody,
+  bufferedUpstreamPath,
+  findSearchToolCall,
+  findSearchToolCalls,
+  injectSearchTool,
+  removeSearchTool,
+  stripNativeSearch,
+  TOOL_DESCRIPTION,
+};

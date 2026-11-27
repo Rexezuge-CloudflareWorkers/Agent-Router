@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Tokens } from '@agent-router/backend-services/composition';
-import { handleAnthropicProxy, handleOpenAiProxy } from '@agent-router/backend-services/proxy';
+import { handleAnthropicProxy, handleGeminiProxy, handleOpenAiProxy } from '@agent-router/backend-services/proxy';
 import type { ProxyIdentity } from '@agent-router/backend-services/proxy';
 
 const identity: ProxyIdentity = { userEmail: 'u@x.y', gatewayKeyId: 'gw-1' };
@@ -128,6 +128,24 @@ describe('proxy operations', () => {
     const input = proxy.mock.calls[0]?.[0] as unknown as Record<string, unknown>;
     expect(input.clientEndpoint).toBe('anthropic');
     expect(input.rawBodyText).toBe(body);
+  });
+
+  it('normalizes bare and prefixed Gemini actions into one upstream path', async () => {
+    const gemini = { id: 'p1', kind: 'GEMINI', status: 'active', baseUrl: null, name: 'p1' };
+    for (const action of ['gemini-2.5-flash:generateContent', 'models/gemini-2.5-flash:generateContent']) {
+      const proxy = vi.fn(async (_input: unknown) => ({
+        status: 200,
+        bodyText: '{"candidates":[]}',
+        contentType: 'application/json',
+        providerKeyId: 'pk-1',
+      }));
+      const response = await handleGeminiProxy({} as never, request('{"contents":[]}'), action, identity, () =>
+        scopeWith(proxy, { provider: gemini }),
+      );
+      expect(response.status).toBe(200);
+      const input = proxy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(input.upstreamPath).toBe('/v1beta/models/gemini-2.5-flash:generateContent');
+    }
   });
 
   // Mon 10:00 Asia/Shanghai — inside DeepSeek's 09:00-12:00 peak window.

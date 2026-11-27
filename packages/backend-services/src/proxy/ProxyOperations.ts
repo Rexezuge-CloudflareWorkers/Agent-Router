@@ -260,7 +260,10 @@ async function handleGeminiProxy(
   identity: ProxyIdentity,
   scopeFactory: ProxyScopeFactory = createRequestScope,
 ): Promise<Response> {
-  const match = /^(models\/[^:]+):(generateContent|streamGenerateContent)$/.exec(action);
+  // The DO hands us `<model>:generateContent` (the Hono route consumes the
+  // `models/` segment), while older callers may send the full `models/...`
+  // action. Accept both and canonicalize before building the upstream path.
+  const match = /^(?:models\/)?([^:/]+):(generateContent|streamGenerateContent)$/.exec(action);
   if (!match) {
     return jsonError('Path must be /gemini/v1beta/models/<model>:generateContent', 'invalid_request_error', 404);
   }
@@ -271,11 +274,11 @@ async function handleGeminiProxy(
 
   // Gemini carries the model in the path, not the body. A fallback used here
   // must itself be a Gemini model, since only a GEMINI provider can serve it.
-  let model = match[1];
-  const decision = await applyPeakPolicy(scope, identity.gatewayKeyId, model.replace(/^models\//, ''));
+  let model = `models/${match[1]}`;
+  const decision = await applyPeakPolicy(scope, identity.gatewayKeyId, match[1]);
   if (decision.action === 'reject') return decision.response;
   if (decision.action === 'rewrite') {
-    model = decision.model;
+    model = decision.model.startsWith('models/') ? decision.model : `models/${decision.model}`;
     if (typeof body.model === 'string') body.model = decision.model;
   }
 

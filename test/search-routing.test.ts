@@ -51,11 +51,24 @@ function harness(mode: WebSearchMode, responses: ProxySuccess[], fetchImpl?: typ
   return { service, proxy, fetchMock };
 }
 
-const toolCall = {
-  choices: [
-    { message: { role: 'assistant', tool_calls: [{ id: 'c1', function: { name: 'web_search', arguments: '{"query":"cloudflare"}' } }] } },
-  ],
-};
+function toolCallWith(id: string, query: string): Record<string, unknown> {
+  return {
+    choices: [
+      {
+        message: {
+          role: 'assistant',
+          tool_calls: [{ id, function: { name: 'web_search', arguments: JSON.stringify({ query }) } }],
+        },
+      },
+    ],
+  };
+}
+
+const toolCall = toolCallWith('c1', 'cloudflare');
+
+function searchResponse(title: string, url: string): Response {
+  return Response.json({ web: { results: [{ title, url, description: 'Snippet' }] } });
+}
 
 describe('WebSearchRoutingService', () => {
   it('leaves requests untouched in native mode', async () => {
@@ -129,5 +142,76 @@ describe('WebSearchRoutingService', () => {
     const second = proxy.mock.calls[1][0] as unknown as ProxyRequest;
     expect(second.rawBodyText).toContain('Web search failed');
     expect(result.bodyText).not.toContain('url_citation');
+  });
+
+  it('converges after two search rounds with globally numbered results', async () => {
+    const fetchImpl = vi.fn(async (): Promise<Response> => Response.json({ web: { results: [] } }));
+    fetchImpl.mockResolvedValueOnce(searchResponse('One', 'https://one.test'));
+    fetchImpl.mockResolvedValueOnce(searchResponse('Two', 'https://two.test'));
+    const { service, proxy } = harness(
+      'third_party',
+      [
+        success(toolCallWith('c1', 'first query')),
+        success(toolCallWith('c2', 'second query')),
+        success({ choices: [{ message: { content: 'Answer [1] [2]' } }] }),
+      ],
+      fetchImpl,
+    );
+    const result = await service.proxy(request({ model: 'gpt-5', messages: [] }), 'chat');
+
+    expect(proxy).toHaveBeenCalledTimes(3);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect((proxy.mock.calls[1][0] as unknown as ProxyRequest).rawBodyText).toContain('[1] One');
+    expect((proxy.mock.calls[2][0] as unknown as ProxyRequest).rawBodyText).toContain('[2] Two');
+    const body = JSON.parse(result.bodyText ?? '{}') as {
+      choices: Array<{ message: { annotations: Array<{ url_citation: { url: string } }> } }>;
+    };
+    expect(body.choices[0].message.annotations.map((item) => item.url_citation.url)).toEqual(['https://one.test', 'https://two.test']);
+  });
+
+  it('forces a final no-tool call when the model keeps searching', async () => {
+    const fetchImpl = vi.fn(async (): Promise<Response> => searchResponse('One', 'https://one.test'));
+    const { service, proxy } = harness(
+      'third_party',
+      [success(toolCall), success(toolCall), success(toolCall), success({ choices: [{ message: { content: 'Final [1]' } }] })],
+      fetchImpl,
+    );
+    const result = await service.proxy(request({ model: 'gpt-5', messages: [{ role: 'user', content: 'hi' }] }), 'chat');
+
+    expect(proxy).toHaveBeenCalledTimes(4);
+    const last = proxy.mock.calls[3][0] as unknown as ProxyRequest;
+    expect((last.upstreamBody as { tools: unknown[] }).tools).toHaveLength(0);
+    expect(last.rawBodyText).toContain('Stop searching');
+    expect(result.bodyText).toContain('Final [1]');
+  });
+
+  it('executes every web_search call in a single response', async () => {
+    const fetchImpl = vi.fn(async (): Promise<Response> => Response.json({ web: { results: [] } }));
+    fetchImpl.mockResolvedValueOnce(searchResponse('One', 'https://one.test'));
+    fetchImpl.mockResolvedValueOnce(searchResponse('Two', 'https://two.test'));
+    const parallel = {
+      choices: [
+        {
+          message: {
+            tool_calls: ['c1', 'c2'].map((id, index) => ({
+              id,
+              function: { name: 'web_search', arguments: JSON.stringify({ query: index === 0 ? 'one' : 'two' }) },
+            })),
+          },
+        },
+      ],
+    };
+    const { service, proxy } = harness(
+      'third_party',
+      [success(parallel), success({ choices: [{ message: { content: 'Done [1] [2]' } }] })],
+      fetchImpl,
+    );
+    await service.proxy(request({ model: 'gpt-5', messages: [] }), 'chat');
+
+    expect(proxy).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const followUp = proxy.mock.calls[1][0] as unknown as ProxyRequest;
+    expect(followUp.rawBodyText).toContain('[1] One');
+    expect(followUp.rawBodyText).toContain('[2] Two');
   });
 });
